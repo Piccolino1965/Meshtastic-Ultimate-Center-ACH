@@ -114,8 +114,7 @@ main.py creates the main Tkinter window and initializes the MeshtasticUltimateCe
 The node is connected via serial or TCP, configuration and channels are read, identity and role are checked, the required parameters are adjusted, and then a JSON backup is saved before applying more invasive changes. On the operational side, you can inspect the nodes seen by the device, use channel chat, send direct messages with ACK, and review delivery history.
 
 ## Project status
-
-The project is fully geared toward practical use and combines both configuration features and mesh observation tools. The foundation is already broad, but some aspects can still be refined further, such as packaging, dependencies declared in requirements.txt, cleanup of the tabs.py file, and the addition of screenshots or demo GIFs.
+
 
 
 ## Screenshot
