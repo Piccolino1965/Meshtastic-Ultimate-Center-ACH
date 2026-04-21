@@ -72,10 +72,40 @@ The required libraries can be identified directly from the imports in core.py an
 ## Installation
 pip install meshtastic pypubsub protobuf plyer
 
+## Installing dependencies with a virtual environment
+```bash
+python -m venv venv
+```
+### Windows
+```bash
+venv\Scripts\activate
+pip install meshtastic pypubsub protobuf plyer
+```
+### Linux
+```bash
+source venv/bin/activate
+pip install meshtastic pypubsub protobuf plyer
+```
 On Linux, you may also need to install system Tk support, since the interface is based on Tkinter.
 
 ## Launch
+```bash
 python main.py
+```
+## With a virtual environment
+
+### Windows
+```bash
+venv\Scripts\activate
+pip install meshtastic pypubsub protobuf plyer
+python main.py
+```
+### Linux
+```bash
+source venv/bin/activate
+pip install meshtastic pypubsub protobuf plyer
+python main.py
+```
 
 main.py creates the main Tkinter window and initializes the MeshtasticUltimateCenter class.
 
