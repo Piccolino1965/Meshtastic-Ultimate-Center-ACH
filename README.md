@@ -74,6 +74,18 @@ Le librerie richieste emergono direttamente dagli import in `core.py` e `gui.py`
 ```bash
 pip install meshtastic pypubsub protobuf plyer
 ```
+## Installazione dipendenze con ambiente virtuale
+
+```bash
+python -m venv venv
+
+### Windows
+venv\Scripts\activate
+pip install meshtastic pypubsub protobuf plyer
+
+### Linux
+source venv/bin/activate
+pip install meshtastic pypubsub protobuf plyer
 
 Su Linux potrebbe essere necessario installare anche il supporto Tk di sistema, perché l'interfaccia è basata su Tkinter.
 
