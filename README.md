@@ -97,15 +97,17 @@ python main.py
 ##  Con ambiente virtuale
 
 ### Windows
+```bash
 venv\Scripts\activate
 pip install meshtastic pypubsub protobuf plyer
 python main.py
-
+```
 ### Linux
+```bash
 source venv/bin/activate
 pip install meshtastic pypubsub protobuf plyer
 python main.py
-
+```
 
 `main.py` crea la finestra principale Tkinter e inizializza la classe `MeshtasticUltimateCenter`.
 
