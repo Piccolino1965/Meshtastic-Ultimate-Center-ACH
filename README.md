@@ -94,6 +94,18 @@ Su Linux potrebbe essere necessario installare anche il supporto Tk di sistema, 
 ```bash
 python main.py
 ```
+##  Con ambiente virtuale
+
+### Windows
+venv\Scripts\activate
+pip install meshtastic pypubsub protobuf plyer
+python main.py
+
+### Linux
+source venv/bin/activate
+pip install meshtastic pypubsub protobuf plyer
+python main.py
+
 
 `main.py` crea la finestra principale Tkinter e inizializza la classe `MeshtasticUltimateCenter`.
 
