@@ -117,7 +117,7 @@ Si collega il nodo via seriale o TCP, si leggono configurazione e canali, si ver
 
 ## Stato del progetto
 
-Il progetto è pienamente orientato all'uso pratico e raccoglie sia funzioni di configurazione sia strumenti di osservazione della mesh. La base è già ampia, ma alcuni aspetti possono essere ulteriormente rifiniti, ad esempio packaging, dipendenze dichiarate in `requirements.txt`, pulizia del file `tabs.py` e aggiunta di screenshot o GIF dimostrative.
+Il progetto è pienamente orientato all'uso pratico e raccoglie sia funzioni di configurazione sia strumenti di osservazione della mesh. 
 
 ## Screenshot
 
