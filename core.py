@@ -11,6 +11,7 @@ import base64
 from pubsub import pub
 from constants import ConnectionState, MessageState
 import utils
+from i18n import tr
 #------------------------------------------------------------
 
 try:
@@ -59,7 +60,7 @@ class MeshtasticDevice:
             return True
         except Exception as e:
             self.state = ConnectionState.ERROR
-            self.log(f"Errore connessione seriale: {e}", "error")
+            self.log(tr("core_logs.serial_connection_error", error=e), "error")
             return False
 
     def connect_tcp(self, host):
@@ -73,7 +74,7 @@ class MeshtasticDevice:
             return True
         except Exception as e:
             self.state = ConnectionState.ERROR
-            self.log(f"Errore connessione TCP: {e}", "error")
+            self.log(tr("core_logs.tcp_connection_error", error=e), "error")
             return False
 
     def _post_connect(self):
@@ -86,7 +87,7 @@ class MeshtasticDevice:
         self.local_node_id = self._get_local_id()
         self.connected = True
         self.state = ConnectionState.CONNECTED
-        self.log(f"Connesso, ID locale: {self.local_node_id}", "success")
+        self.log(tr("core_logs.connected_local_id", node_id=self.local_node_id), "success")
 
     def disconnect(self):
         try:
@@ -98,7 +99,7 @@ class MeshtasticDevice:
             if self.interface:
                 self.interface.close()
         except Exception as e:
-            self.log(f"Errore in disconnessione: {e}", "warn")
+            self.log(tr("core_logs.disconnect_error", error=e), "warn")
         finally:
             self.interface = None
             self.local_node = None
@@ -107,17 +108,17 @@ class MeshtasticDevice:
             self.state = ConnectionState.DISCONNECTED
             self._pending_acks.clear()
             gc.collect()
-            self.log("Disconnessione completata", "info")
+            self.log(tr("core_logs.disconnect_done"), "info")
 
     def subscribe(self, topic, callback):
         try:
             pub.subscribe(callback, topic)
             self._subscriptions.append((topic, callback))
         except Exception as e:
-            self.log(f"Errore subscribe {topic}: {e}", "warn")
+            self.log(tr("core_logs.subscribe_error", topic=topic, error=e), "warn")
 
     def add_message_callback(self, callback):
-        """Aggiunge un callback da chiamare quando arriva un nuovo messaggio"""
+         
         self._message_callbacks.append(callback)
 
     # ==================== METODI DI LETTURA ====================
@@ -242,7 +243,7 @@ class MeshtasticDevice:
     # ==================== METODI DI SCRITTURA ====================
 
     def set_config_value(self, config_obj, attr, value):
-        """Imposta un valore di configurazione se diverso"""
+         
         if not config_obj:
             return False
         try:
@@ -252,13 +253,13 @@ class MeshtasticDevice:
                     setattr(config_obj, attr, value)
                     return True
             else:
-                self.log(f"Attributo {attr} non trovato in {type(config_obj).__name__}", "warn")
+                self.log(tr("core_logs.attribute_not_found", attr=attr, object_type=type(config_obj).__name__), "warn")
         except Exception as e:
-            self.log(f"Errore impostazione {attr}: {e}", "warn")
+            self.log(tr("core_logs.set_attribute_error", attr=attr, error=e), "warn")
         return False
 
     def set_enum_value(self, config_obj, attr, value_name):
-        """Imposta un valore enum tramite nome"""
+         
         if not config_obj or not value_name:
             return False
 
@@ -275,7 +276,7 @@ class MeshtasticDevice:
                             setattr(config_obj, attr, enum_val.number)
                             return True
         except Exception as e:
-            self.log(f"Errore impostazione enum {attr}: {e}", "warn")
+            self.log(tr("core_logs.set_enum_error", attr=attr, error=e), "warn")
         return False
 
     def write_channel(self, index):
@@ -325,7 +326,7 @@ class MeshtasticDevice:
                 )
                 return True
         except Exception as e:
-            self.log(f"setOwner fallito: {e}", "warn")
+            self.log(tr("core_logs.set_owner_failed", error=e), "warn")
             # Fallback
             try:
                 user = getattr(self.local_node, "user", None)
@@ -344,16 +345,16 @@ class MeshtasticDevice:
     def remove_node(self, node_id):
          
         if not self.connected or not self.interface:
-            self.log("Non connesso, impossibile rimuovere il nodo", "warn")
+            self.log(tr("core_logs.not_connected_remove_node"), "warn")
             return False
 
         node_id = utils.normalize_id(node_id)
         if not node_id:
-            self.log("ID nodo non valido", "warn")
+            self.log(tr("core_logs.invalid_node_id"), "warn")
             return False
 
         if node_id == self.local_node_id:
-            self.log("Tentativo di rimozione del nodo locale bloccato", "warn")
+            self.log(tr("core_logs.local_node_remove_blocked"), "warn")
             return False
 
         try:
@@ -368,7 +369,7 @@ class MeshtasticDevice:
                     target = self.interface.getNode(self.local_node_id)
 
             if not target or not hasattr(target, "removeNode"):
-                self.log("API removeNode non disponibile su questo dispositivo/interfaccia", "warn")
+                self.log(tr("core_logs.remove_node_api_missing"), "warn")
                 return False
 
             target.removeNode(node_id)
@@ -381,11 +382,11 @@ class MeshtasticDevice:
                 pass
 
             self._nodes_cache.pop(node_id, None)
-            self.log(f"Richiesta rimozione nodo inviata: {node_id}", "info")
+            self.log(tr("core_logs.remove_node_requested", node_id=node_id), "info")
             return True
 
         except Exception as e:
-            self.log(f"Errore remove_node {node_id}: {e}", "error")
+            self.log(tr("core_logs.remove_node_error", node_id=node_id, error=e), "error")
             return False
 
     # ==================== METODI INVIO MESSAGGI CON ACK ====================
@@ -416,7 +417,7 @@ class MeshtasticDevice:
             local_id: ID locale del messaggio se inviato, None altrimenti
         """
         if not self.interface:
-            self.log("Impossibile inviare: non connesso", "error")
+            self.log(tr("core_logs.send_not_connected"), "error")
             return None
         
         try:
@@ -449,7 +450,7 @@ class MeshtasticDevice:
                     'local_id': local_id,
                     'retries': 0
                 }
-                self.log(f"Messaggio inviato con ACK (ID locale: {local_id})", "info")
+                self.log(tr("core_logs.message_sent_ack", local_id=local_id), "info")
             else:
                 # Messaggio senza ACK, registra come inviato
                 self._message_history.append({
@@ -461,12 +462,12 @@ class MeshtasticDevice:
                     'direction': 'sent',
                     'status': MessageState.SENT
                 })
-                self.log(f"Messaggio inviato (ID locale: {local_id})", "info")
+                self.log(tr("core_logs.message_sent", local_id=local_id), "info")
             
             return local_id
             
         except Exception as e:
-            self.log(f"Invio messaggio fallito: {e}", "error")
+            self.log(tr("core_logs.message_send_failed", error=e), "error")
             return None
 
     # ==================== GESTIONE PACCHETTI RICEVUTI ====================
@@ -483,7 +484,7 @@ class MeshtasticDevice:
             if decoded.get('text'):
                 self._handle_text_packet(packet)
         except Exception as e:
-            self.log(f"Errore in on_packet_received: {e}", "error")
+            self.log(tr("core_logs.packet_receive_error", error=e), "error")
 
     def _handle_ack_packet(self, packet):
         
@@ -491,7 +492,7 @@ class MeshtasticDevice:
             from_id = utils.normalize_id(packet.get('fromId', packet.get('from')))
             decoded = packet.get('decoded', {})
             request_id = decoded.get('requestId')  # ID del messaggio originale (generato dalla libreria)
-            self.log(f"ACK ricevuto da {from_id} per requestId: {request_id}", "debug")
+            self.log(tr("core_logs.ack_received", from_id=from_id, request_id=request_id), "debug")
             
             # Cerchiamo il messaggio pending per questo destinatario
             now = time.time()
@@ -511,10 +512,10 @@ class MeshtasticDevice:
                 local_id, pending = best_match
                 self._confirm_ack(local_id, pending)
             else:
-                self.log(f"ACK da {from_id} non associato ad alcun pending", "debug")
+                self.log(tr("core_logs.ack_unmatched", from_id=from_id), "debug")
                 
         except Exception as e:
-            self.log(f"Errore in _handle_ack_packet: {e}", "error")
+            self.log(tr("core_logs.ack_packet_error", error=e), "error")
 
     # Gestisce un messaggio di testo ricevuto e lo memorizza nello storico
     def _handle_text_packet(self, packet):
@@ -527,13 +528,13 @@ class MeshtasticDevice:
             if not text:
                 return
                 
-            self.log(f"Messaggio da {from_id}: {text}", "info")
+            self.log(tr("core_logs.text_message_from", from_id=from_id, text=text), "info")
             
             # Determina il tipo di messaggio
             if to_id == self.local_node_id:
-                msg_type = "Diretto"
+                msg_type = tr("message_types.direct")
             else:
-                msg_type = "Canale"
+                msg_type = tr("message_types.channel")
             
             # Aggiungi ai messaggi ricevuti
             self._message_history.append({
@@ -552,10 +553,10 @@ class MeshtasticDevice:
                 try:
                     callback()
                 except Exception as e:
-                    self.log(f"Errore nel callback messaggio: {e}", "warn")
+                    self.log(tr("core_logs.message_callback_error", error=e), "warn")
             
         except Exception as e:
-            self.log(f"Errore in _handle_text_packet: {e}", "error")
+            self.log(tr("core_logs.text_packet_error", error=e), "error")
 
     def _confirm_ack(self, local_id, pending):
         """Conferma la consegna di un messaggio"""
@@ -563,14 +564,14 @@ class MeshtasticDevice:
             delivery_time = time.time() - pending['timestamp']
             pending['status'] = MessageState.DELIVERED
             pending['delivery_time'] = delivery_time
-            self.log(f"Conferma ricevuta per messaggio {local_id} in {delivery_time:.1f}s", "success")
+            self.log(tr("core_logs.ack_confirmed", local_id=local_id, seconds=delivery_time), "success")
             
             # Chiama il callback se presente
             if pending['callback']:
                 try:
                     pending['callback'](True, delivery_time, pending)
                 except Exception as e:
-                    self.log(f"Errore nel callback ACK: {e}", "warn")
+                    self.log(tr("core_logs.ack_callback_error", error=e), "warn")
             
             # Sposta nello storico
             self._message_history.append({
@@ -593,10 +594,10 @@ class MeshtasticDevice:
                 try:
                     callback()
                 except Exception as e:
-                    self.log(f"Errore nel callback storico: {e}", "warn")
+                    self.log(tr("core_logs.history_callback_error", error=e), "warn")
             
         except Exception as e:
-            self.log(f"Errore in _confirm_ack: {e}", "error")
+            self.log(tr("core_logs.confirm_ack_error", error=e), "error")
 
     def check_ack_timeouts(self):
         """
@@ -615,14 +616,14 @@ class MeshtasticDevice:
                 timed_out.append(local_id)
                 pending['status'] = MessageState.TIMEOUT
                 
-                self.log(f"Timeout per messaggio {local_id}", "warn")
+                self.log(tr("core_logs.message_timeout", local_id=local_id), "warn")
                 
                 # Chiama il callback con fallimento
                 if pending['callback']:
                     try:
                         pending['callback'](False, None, pending)
                     except Exception as e:
-                        self.log(f"Errore nel callback timeout: {e}", "warn")
+                        self.log(tr("core_logs.timeout_callback_error", error=e), "warn")
                 
                 # Sposta nello storico
                 self._message_history.append({
@@ -641,7 +642,7 @@ class MeshtasticDevice:
                     try:
                         callback()
                     except Exception as e:
-                        self.log(f"Errore nel callback storico: {e}", "warn")
+                        self.log(tr("core_logs.history_callback_error", error=e), "warn")
         
         # Rimuovi quelli scaduti
         for local_id in timed_out:
@@ -732,7 +733,7 @@ class MeshtasticDevice:
         """Pulisce lo storico dei messaggi"""
         self._message_history = []
         self._pending_acks.clear()
-        self.log("Storico messaggi cancellato", "info")
+        self.log(tr("core_logs.history_cleared"), "info")
 
     # ==================== METODI DI SCRITTURA CONFIG (PER SINGOLE SEZIONI) ====================
 
@@ -923,15 +924,15 @@ class MeshtasticDevice:
 
     def write_primary_channel_safe(self, vars_dict, validate_callback=None):
         if not self.local_node:
-            raise RuntimeError("localNode non disponibile")
+            raise RuntimeError(tr("core_logs.local_node_missing"))
 
         idx, ch = self.find_primary_channel()
         if ch is None:
-            raise RuntimeError("Canale primario non trovato")
+            raise RuntimeError(tr("core_logs.primary_channel_not_found"))
 
         settings = self.get_channel_settings(ch)
         if settings is None:
-            raise RuntimeError("settings del canale primario non disponibili")
+            raise RuntimeError(tr("core_logs.primary_channel_settings_missing"))
 
         changes = []
 
@@ -968,7 +969,7 @@ class MeshtasticDevice:
 
     def apply_all_config(self, vars_dict, validate_callback=None):
         if not self.local_node:
-            raise RuntimeError("localNode non disponibile")
+            raise RuntimeError(tr("core_logs.local_node_missing"))
 
         local_cfg, module_cfg = self.read_config()
         if not local_cfg:
@@ -1039,7 +1040,7 @@ class MeshtasticDevice:
             if channel_changes:
                 all_changes.extend(channel_changes)
         except Exception as e:
-            self.log(f"Errore scrittura canale: {e}", "warn")
+            self.log(tr("core_logs.channel_write_error", error=e), "warn")
 
         # Scrivi le sezioni modificate
         if sections_to_write:
@@ -1047,17 +1048,17 @@ class MeshtasticDevice:
             if len(sections_to_write) > 1:
                 tx_started = self.begin_transaction()
                 if tx_started:
-                    self.log("Transazione iniziata", "info")
+                    self.log(tr("core_logs.transaction_started"), "info")
 
             for section in sections_to_write:
                 if self.write_config(section):
-                    self.log(f"Sezione {section} scritta", "info")
+                    self.log(tr("core_logs.section_written", section=section), "info")
                 else:
-                    self.log(f"Errore scrittura sezione {section}", "warn")
+                    self.log(tr("core_logs.section_write_error", section=section), "warn")
 
             if tx_started:
                 self.commit_transaction()
-                self.log("Transazione completata", "info")
+                self.log(tr("core_logs.transaction_completed"), "info")
 
         return all_changes
 
@@ -1133,9 +1134,9 @@ class MeshtasticDevice:
                         try:
                             self.write_config(section)
                         except Exception as e:
-                            self.log(f"Errore scrittura sezione {section}: {e}", "warn")
+                            self.log(tr("core_logs.section_write_error_detail", section=section, error=e), "warn")
                 except Exception as e:
-                    self.log(f"Errore ripristino localConfig: {e}", "error")
+                    self.log(tr("core_logs.restore_local_config_error", error=e), "error")
 
         # 3. Ripristina moduleConfig
         module_dict = config_dict.get("moduleConfig")
@@ -1151,9 +1152,9 @@ class MeshtasticDevice:
                         try:
                             self.write_config(section)
                         except Exception as e:
-                            self.log(f"Errore scrittura modulo {section}: {e}", "warn")
+                            self.log(tr("core_logs.module_write_error_detail", section=section, error=e), "warn")
                 except Exception as e:
-                    self.log(f"Errore ripristino moduleConfig: {e}", "error")
+                    self.log(tr("core_logs.restore_module_config_error", error=e), "error")
 
         # 4. Ripristina canali
         channels_list = config_dict.get("channels", [])
@@ -1171,8 +1172,8 @@ class MeshtasticDevice:
                         ParseDict(ch_dict, ch, ignore_unknown_fields=True)
                         self.write_channel(idx)
                     except Exception as e:
-                        self.log(f"Errore ripristino canale {idx}: {e}", "error")
+                        self.log(tr("core_logs.restore_channel_error", index=idx, error=e), "error")
                 else:
-                    self.log(f"Canale indice {idx} non trovato, impossibile ripristinare", "warn")
+                    self.log(tr("core_logs.restore_channel_missing", index=idx), "warn")
 
-        self.log("Ripristino configurazione completato", "success")
+        self.log(tr("core_logs.restore_done"), "success")

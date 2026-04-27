@@ -16,12 +16,14 @@ from datetime import datetime
 
 from constants import UI, ConnectionState, MessageState
 import utils
+from i18n import tr, load_language, save_language, current_language
 from core import MeshtasticDevice
 
 class MeshtasticUltimateCenter:
     def __init__(self, root):
+        load_language()
         self.root = root
-        self.root.title("Meshtastic Ultimate Center v4.2 - aiutocomputerhelp.it")
+        self.root.title(tr("app.title"))
         self.root.geometry("1500x950")
         self.root.configure(bg=UI.BG)
         
@@ -58,8 +60,8 @@ class MeshtasticUltimateCenter:
         try:
             import meshtastic
         except Exception as e:
-            self.log(f"ERRORE: Libreria meshtastic non installata: {e}", "error")
-            messagebox.showerror("Errore", "Installa meshtastic: pip install meshtastic")
+            self.log(tr("logs.meshtastic_missing", error=e), "error")
+            messagebox.showerror(tr("dialogs.meshtastic_missing_title"), tr("dialogs.meshtastic_missing_body"))
     
     def on_new_message(self):
         
@@ -68,8 +70,46 @@ class MeshtasticUltimateCenter:
             self.root.after(0, self.refresh_message_stats)
             self.root.after(0, self._update_pending_count)
         except Exception as e:
-            print(f"Errore in on_new_message: {e}")
+            print(tr("logs.on_new_message_error", error=e))
 
+
+    # ==================== LINGUA INTERFACCIA ====================
+
+    def _language_label(self, language_code):
+        """Restituisce l'etichetta visibile per il codice lingua."""
+        code = str(language_code or "").strip().lower()
+        if code == "en":
+            return tr("settings.english")
+        return tr("settings.italian")
+
+    def _language_code(self, language_label):
+        """
+        Converte l'etichetta scelta nella GUI nel codice lingua interno.
+        I codici interni restano sempre it/en e non dipendono dal testo mostrato.
+        """
+        value = str(language_label or "").strip().lower()
+        if value in ("en", "english", tr("settings.english").strip().lower()):
+            return "en"
+        return "it"
+
+    def _language_labels(self):
+        """Etichette mostrate nelle ComboBox lingua."""
+        return [tr("settings.italian"), tr("settings.english")]
+
+    def on_language_change(self, event=None):
+        """
+        Salva la lingua scelta dalla GUI.
+        La UI viene aggiornata al prossimo avvio per evitare effetti collaterali sui widget Tkinter.
+        """
+        lang_code = self._language_code(self.vars["language"].get())
+        save_language(lang_code)
+        self.vars["language"].set(self._language_label(lang_code))
+
+        self.log(tr("logs.language_saved", language=self.vars["language"].get()), "info")
+        messagebox.showinfo(
+            tr("dialogs.settings_saved_title"),
+            tr("settings.language_restart_note")
+        )
 
     # delineo tutte le variabili Tkinter
     def _create_variables(self):
@@ -79,7 +119,7 @@ class MeshtasticUltimateCenter:
             'conn_type': tk.StringVar(value="serial"),
             'port': tk.StringVar(value="COM3"),
             'host': tk.StringVar(value="192.168.1.1"),
-            'status': tk.StringVar(value="Disconnesso"),
+            'status': tk.StringVar(value=tr("connection.disconnected")),
             
             # Identita
             'long_name': tk.StringVar(),
@@ -132,7 +172,7 @@ class MeshtasticUltimateCenter:
             'channel_role': tk.StringVar(),
             'channel_uplink': tk.BooleanVar(),
             'channel_downlink': tk.BooleanVar(),
-            'channel_psk': tk.StringVar(value="Non gestita"),
+            'channel_psk': tk.StringVar(value=tr("primary_channel.not_managed")),
             'channel_write_name': tk.BooleanVar(value=True),
             'channel_write_flags': tk.BooleanVar(value=True),
             
@@ -140,10 +180,11 @@ class MeshtasticUltimateCenter:
             'mesh_include_self': tk.BooleanVar(value=False),
             'mesh_only_recent': tk.BooleanVar(value=False),
             'mesh_recent_secs': tk.StringVar(value="86400"),
-            'mesh_selected': tk.StringVar(value="Nessun nodo"),
+            'mesh_selected': tk.StringVar(value=tr("mesh.no_node")),
             
             # UI Options
             'auto_scroll': tk.BooleanVar(value=True),
+            'language': tk.StringVar(value=self._language_label(current_language())),
             'filter_text': tk.StringVar(),
             'only_my_msgs': tk.BooleanVar(value=True),
             'preserve_mqtt': tk.BooleanVar(value=False),
@@ -192,10 +233,10 @@ class MeshtasticUltimateCenter:
     def _build_toolbar(self, parent):
         
         # Connessione
-        ttk.Label(parent, text="Connessione:").pack(side=tk.LEFT)
-        ttk.Radiobutton(parent, text="Seriale", variable=self.vars['conn_type'], 
+        ttk.Label(parent, text=tr("connection.label")).pack(side=tk.LEFT)
+        ttk.Radiobutton(parent, text=tr("connection.serial"), variable=self.vars['conn_type'], 
                        value="serial").pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(parent, text="TCP/IP", variable=self.vars['conn_type'],
+        ttk.Radiobutton(parent, text=tr("connection.tcp"), variable=self.vars['conn_type'],
                        value="tcp").pack(side=tk.LEFT)
         
         self.port_combo = ttk.Combobox(parent, textvariable=self.vars['port'],
@@ -203,40 +244,56 @@ class MeshtasticUltimateCenter:
         self.port_combo.pack(side=tk.LEFT, padx=5)
         
         self.host_entry = ttk.Entry(parent, textvariable=self.vars['host'], width=15)
+        
+        # Scelta lingua in toolbar.
+        # La ComboBox mostra etichette leggibili, ma salva solo codici interni it/en.
+        self.language_label = ttk.Label(parent, text=tr("settings.language") + ":")
+        self.language_label.pack(side=tk.LEFT, padx=(10, 2))
+
+        self.language_combo = ttk.Combobox(
+            parent,
+            textvariable=self.vars['language'],
+            values=self._language_labels(),
+            width=10,
+            state="readonly"
+        )
+        self.language_combo.pack(side=tk.LEFT, padx=5)
+        self.language_combo.bind("<<ComboboxSelected>>", self.on_language_change)
+
         self._update_conn_fields()
         self.vars['conn_type'].trace('w', lambda *a: self._update_conn_fields())
         
-        self.connect_btn = ttk.Button(parent, text="Connetti", command=self.connect)
+        self.connect_btn = ttk.Button(parent, text=tr("connection.connect"), command=self.connect)
         self.connect_btn.pack(side=tk.LEFT, padx=2)
         
-        self.disconnect_btn = ttk.Button(parent, text="Disconnetti", command=self.disconnect)
+        self.disconnect_btn = ttk.Button(parent, text=tr("connection.disconnect"), command=self.disconnect)
         self.disconnect_btn.pack(side=tk.LEFT, padx=2)
         
         # Separatore
         ttk.Separator(parent, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
         # Comandi configurazione
-        ttk.Button(parent, text="Leggi config", command=self.read_config).pack(side=tk.LEFT, padx=2)
-        ttk.Button(parent, text="Update", command=self.apply_config).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.read_config"), command=self.read_config).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.update"), command=self.apply_config).pack(side=tk.LEFT, padx=2)
         
         # Separatore
         ttk.Separator(parent, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
         # Backup/Restore
-        ttk.Button(parent, text="Backup", command=self.export_snapshot).pack(side=tk.LEFT, padx=2)
-        ttk.Button(parent, text="Restore", command=self.import_snapshot).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.backup"), command=self.export_snapshot).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.restore"), command=self.import_snapshot).pack(side=tk.LEFT, padx=2)
         
         # Separatore
         ttk.Separator(parent, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
         # Utilità
-        ttk.Button(parent, text="Pulisci Log", command=self.clear_log).pack(side=tk.LEFT, padx=2)
-        ttk.Button(parent, text="Statistiche", command=self.show_stats).pack(side=tk.LEFT, padx=2)
-        ttk.Button(parent, text="Reboot", command=self.confirm_reboot,
+        ttk.Button(parent, text=tr("toolbar.clear_log"), command=self.clear_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.statistics"), command=self.show_stats).pack(side=tk.LEFT, padx=2)
+        ttk.Button(parent, text=tr("toolbar.reboot"), command=self.confirm_reboot,
                   style='Danger.TButton').pack(side=tk.LEFT, padx=2)
         
         # Checkbox
-        ttk.Checkbutton(parent, text="Solo messaggi per me", 
+        ttk.Checkbutton(parent, text=tr("toolbar.only_my_messages"), 
                     variable=self.vars['only_my_msgs']).pack(side=tk.LEFT, padx=5)
     
     # pannello log
@@ -244,12 +301,12 @@ class MeshtasticUltimateCenter:
         
         header = ttk.Frame(parent)
         header.pack(fill=tk.X)
-        ttk.Label(header, text="Log", font=('',10,'bold')).pack(side=tk.LEFT)
+        ttk.Label(header, text=tr("log_panel.title"), font=('',10,'bold')).pack(side=tk.LEFT)
         
         self.parse_error_label = ttk.Label(header, text="", foreground='orange')
         self.parse_error_label.pack(side=tk.RIGHT, padx=10)
         
-        ttk.Checkbutton(header, text="Auto-scroll", 
+        ttk.Checkbutton(header, text=tr("log_panel.auto_scroll"), 
                        variable=self.vars['auto_scroll']).pack(side=tk.RIGHT)
         
         self.log_text = scrolledtext.ScrolledText(parent, wrap=tk.WORD,
@@ -282,76 +339,76 @@ class MeshtasticUltimateCenter:
         # Identity tab
         self.tab_identity = ttk.Frame(self.notebook)
         self._build_identity_tab()
-        self.notebook.add(self.tab_identity, text="Identita")
+        self.notebook.add(self.tab_identity, text=tr("tabs.identity"))
         
         # Green tab
         self.tab_green = ttk.Frame(self.notebook)
         self._build_green_tab()
-        self.notebook.add(self.tab_green, text="Green")
+        self.notebook.add(self.tab_green, text=tr("tabs.green"))
         
         # Radio tab - MODIFICATO (rimosso colore)
         self.tab_radio = ttk.Frame(self.notebook)
         self._build_radio_tab()
-        self.notebook.add(self.tab_radio, text="Radio")
+        self.notebook.add(self.tab_radio, text=tr("tabs.radio"))
         
         # WiFi tab - MODIFICATO (rimossi colori)
         self.tab_wifi = ttk.Frame(self.notebook)
         self._build_wifi_tab()
-        self.notebook.add(self.tab_wifi, text="WiFi")
+        self.notebook.add(self.tab_wifi, text=tr("tabs.wifi"))
         
         # Primary Channel tab
         self.tab_primary = ttk.Frame(self.notebook)
         self._build_primary_tab()
-        self.notebook.add(self.tab_primary, text="Canale Primario")
+        self.notebook.add(self.tab_primary, text=tr("tabs.primary_channel"))
         
         # Channels tab
         self.tab_channels = ttk.Frame(self.notebook)
         self._build_channels_tab()
-        self.notebook.add(self.tab_channels, text="Canali")
+        self.notebook.add(self.tab_channels, text=tr("tabs.channels"))
         
         # Mesh tab
         self.tab_mesh = ttk.Frame(self.notebook)
         self._build_mesh_tab()
-        self.notebook.add(self.tab_mesh, text="Mesh")
+        self.notebook.add(self.tab_mesh, text=tr("tabs.mesh"))
         
         # Nodes tab
         self.tab_nodes = ttk.Frame(self.notebook)
         self._build_nodes_tab()
-        self.notebook.add(self.tab_nodes, text="Nodi")
+        self.notebook.add(self.tab_nodes, text=tr("tabs.nodes"))
         
         # Chat tab
         self.tab_chat = ttk.Frame(self.notebook)
         self._build_chat_tab()
-        self.notebook.add(self.tab_chat, text="Chat")
+        self.notebook.add(self.tab_chat, text=tr("tabs.chat"))
         
         # Direct tab con ACK
         self.tab_direct = ttk.Frame(self.notebook)
         self._build_direct_tab()
-        self.notebook.add(self.tab_direct, text="Messaggi diretti")
+        self.notebook.add(self.tab_direct, text=tr("tabs.direct_messages"))
         
         # Tab Stato Messaggi
         self.tab_messages = ttk.Frame(self.notebook)
         self._build_messages_tab()
-        self.notebook.add(self.tab_messages, text="Stato Messaggi")
+        self.notebook.add(self.tab_messages, text=tr("tabs.message_status"))
         
         # Stats tab
         self.tab_stats = ttk.Frame(self.notebook)
         self._build_stats_tab()
-        self.notebook.add(self.tab_stats, text="Statistiche")
+        self.notebook.add(self.tab_stats, text=tr("toolbar.statistics"))
         
         # Settings tab con impostazioni ACK
         self.tab_settings = ttk.Frame(self.notebook)
         self._build_settings_tab()
-        self.notebook.add(self.tab_settings, text="Impostazioni")
+        self.notebook.add(self.tab_settings, text=tr("tabs.settings"))
     
     def _build_identity_tab(self):
         frame = self.tab_identity
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        ttk.Label(frame, text="Long Name").grid(row=0, column=0, sticky="w", pady=8)
+        ttk.Label(frame, text=tr("identity.long_name")).grid(row=0, column=0, sticky="w", pady=8)
         ttk.Entry(frame, textvariable=self.vars['long_name'], width=40).grid(row=0, column=1, padx=5)
         
-        ttk.Label(frame, text="Short Name").grid(row=1, column=0, sticky="w", pady=8)
+        ttk.Label(frame, text=tr("identity.short_name")).grid(row=1, column=0, sticky="w", pady=8)
         ttk.Entry(frame, textvariable=self.vars['short_name'], width=20).grid(row=1, column=1, padx=5)
     
     def _build_green_tab(self):
@@ -359,65 +416,65 @@ class MeshtasticUltimateCenter:
         outer.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # Posizione
-        pos = ttk.LabelFrame(outer, text="Posizione")
+        pos = ttk.LabelFrame(outer, text=tr("green.position"))
         pos.pack(fill=tk.X, pady=5)
         
-        ttk.Label(pos, text="GPS Mode").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(pos, text=tr("green.gps_mode")).grid(row=0, column=0, sticky="w", pady=5)
         ttk.Entry(pos, textvariable=self.vars['gps_mode'], width=20).grid(row=0, column=1, padx=5)
         
-        ttk.Label(pos, text="GPS Update").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(pos, text=tr("green.gps_update")).grid(row=1, column=0, sticky="w", pady=5)
         ttk.Entry(pos, textvariable=self.vars['gps_update'], width=15).grid(row=1, column=1, padx=5)
         
-        ttk.Label(pos, text="Broadcast secs").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(pos, text=tr("green.broadcast_secs")).grid(row=2, column=0, sticky="w", pady=5)
         ttk.Entry(pos, textvariable=self.vars['pos_broadcast'], width=15).grid(row=2, column=1, padx=5)
         
-        ttk.Checkbutton(pos, text="Smart Broadcast", variable=self.vars['smart_broadcast']).grid(row=3, column=0, columnspan=2, sticky="w")
-        ttk.Checkbutton(pos, text="Fixed Position", variable=self.vars['fixed_position']).grid(row=4, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(pos, text=tr("green.smart_broadcast"), variable=self.vars['smart_broadcast']).grid(row=3, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(pos, text=tr("green.fixed_position"), variable=self.vars['fixed_position']).grid(row=4, column=0, columnspan=2, sticky="w")
         
         # Range Test
-        range_f = ttk.LabelFrame(outer, text="Range Test")
+        range_f = ttk.LabelFrame(outer, text=tr("green.range_test"))
         range_f.pack(fill=tk.X, pady=5)
         
-        ttk.Checkbutton(range_f, text="Enabled", variable=self.vars['range_enabled']).pack(anchor="w")
-        ttk.Checkbutton(range_f, text="Sender", variable=self.vars['range_sender']).pack(anchor="w")
-        ttk.Label(range_f, text="Interval:").pack(anchor="w")
+        ttk.Checkbutton(range_f, text=tr("green.enabled"), variable=self.vars['range_enabled']).pack(anchor="w")
+        ttk.Checkbutton(range_f, text=tr("green.sender"), variable=self.vars['range_sender']).pack(anchor="w")
+        ttk.Label(range_f, text=tr("green.interval")).pack(anchor="w")
         ttk.Entry(range_f, textvariable=self.vars['range_interval'], width=15).pack(anchor="w", padx=10)
         
         # MQTT
-        mqtt = ttk.LabelFrame(outer, text="MQTT")
+        mqtt = ttk.LabelFrame(outer, text=tr("green.mqtt"))
         mqtt.pack(fill=tk.X, pady=5)
         
-        ttk.Checkbutton(mqtt, text="Enabled", variable=self.vars['mqtt_enabled']).pack(anchor="w")
-        ttk.Checkbutton(mqtt, text="Proxy to Client", variable=self.vars['mqtt_proxy']).pack(anchor="w")
-        ttk.Checkbutton(mqtt, text="TLS", variable=self.vars['mqtt_tls']).pack(anchor="w")
-        ttk.Checkbutton(mqtt, text="Encryption", variable=self.vars['mqtt_encryption']).pack(anchor="w")
-        ttk.Checkbutton(mqtt, text="JSON", variable=self.vars['mqtt_json']).pack(anchor="w")
+        ttk.Checkbutton(mqtt, text=tr("green.enabled"), variable=self.vars['mqtt_enabled']).pack(anchor="w")
+        ttk.Checkbutton(mqtt, text=tr("green.proxy_to_client"), variable=self.vars['mqtt_proxy']).pack(anchor="w")
+        ttk.Checkbutton(mqtt, text=tr("green.tls"), variable=self.vars['mqtt_tls']).pack(anchor="w")
+        ttk.Checkbutton(mqtt, text=tr("green.encryption"), variable=self.vars['mqtt_encryption']).pack(anchor="w")
+        ttk.Checkbutton(mqtt, text=tr("green.json"), variable=self.vars['mqtt_json']).pack(anchor="w")
         
-        ttk.Label(mqtt, text="Broker:").pack(anchor="w")
+        ttk.Label(mqtt, text=tr("green.broker")).pack(anchor="w")
         ttk.Entry(mqtt, textvariable=self.vars['mqtt_address'], width=40).pack(fill=tk.X, padx=5)
         
-        ttk.Label(mqtt, text="Username:").pack(anchor="w")
+        ttk.Label(mqtt, text=tr("green.username")).pack(anchor="w")
         ttk.Entry(mqtt, textvariable=self.vars['mqtt_username'], width=30).pack(fill=tk.X, padx=5)
         
-        ttk.Label(mqtt, text="Password:").pack(anchor="w")
+        ttk.Label(mqtt, text=tr("green.password")).pack(anchor="w")
         ttk.Entry(mqtt, textvariable=self.vars['mqtt_password'], width=30, show="*").pack(fill=tk.X, padx=5)
         
-        ttk.Label(mqtt, text="Root Topic:").pack(anchor="w")
+        ttk.Label(mqtt, text=tr("green.root_topic")).pack(anchor="w")
         ttk.Entry(mqtt, textvariable=self.vars['mqtt_root'], width=40).pack(fill=tk.X, padx=5)
         
         # Display
-        disp = ttk.LabelFrame(outer, text="Display")
+        disp = ttk.LabelFrame(outer, text=tr("green.display"))
         disp.pack(fill=tk.X, pady=5)
         
-        ttk.Label(disp, text="Screen On (secs):").pack(anchor="w")
+        ttk.Label(disp, text=tr("green.screen_on_secs")).pack(anchor="w")
         ttk.Entry(disp, textvariable=self.vars['display_screen'], width=15).pack(anchor="w", padx=10)
         
-        ttk.Label(disp, text="GPS Format:").pack(anchor="w")
+        ttk.Label(disp, text=tr("green.gps_format")).pack(anchor="w")
         ttk.Combobox(disp, textvariable=self.vars['display_gps'], 
                     values=UI.GPS_FORMATS, width=20).pack(anchor="w", padx=10)
         
-        ttk.Checkbutton(disp, text="Compass North Top", variable=self.vars['display_compass']).pack(anchor="w")
-        ttk.Checkbutton(disp, text="24 Hour Format", variable=self.vars['display_24h']).pack(anchor="w")
+        ttk.Checkbutton(disp, text=tr("green.compass_north_top"), variable=self.vars['display_compass']).pack(anchor="w")
+        ttk.Checkbutton(disp, text=tr("green.format_24h"), variable=self.vars['display_24h']).pack(anchor="w")
     
     
     def _build_radio_tab(self):
@@ -426,26 +483,26 @@ class MeshtasticUltimateCenter:
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # RIMOSSO foreground=UI.WARN - ora solo grassetto per leggibilità
-        ttk.Label(frame, text="Attenzione !! Parametri delicati", 
+        ttk.Label(frame, text=tr("radio.warning"), 
                   font=('', 10, 'bold')).grid(row=0, column=0, columnspan=2, 
                                               sticky="w", pady=(5,15))
 
-        ttk.Label(frame, text="Node Role").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text=tr("radio.node_role")).grid(row=1, column=0, sticky="w", pady=5)
         ttk.Combobox(frame, textvariable=self.vars['role'], 
                      values=UI.ROLES, width=25).grid(row=1, column=1, padx=5)
         
-        ttk.Label(frame, text="Region").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text=tr("radio.region")).grid(row=2, column=0, sticky="w", pady=5)
         ttk.Combobox(frame, textvariable=self.vars['region'], 
                      values=UI.REGIONS, width=25).grid(row=2, column=1, padx=5)
         
-        ttk.Label(frame, text="Modem Preset").grid(row=3, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text=tr("radio.modem_preset")).grid(row=3, column=0, sticky="w", pady=5)
         ttk.Combobox(frame, textvariable=self.vars['modem'], 
                      values=UI.MODEM_PRESETS, width=25).grid(row=3, column=1, padx=5)
         
-        ttk.Label(frame, text="Hop Limit").grid(row=4, column=0, sticky="w", pady=5)
+        ttk.Label(frame, text=tr("radio.hop_limit")).grid(row=4, column=0, sticky="w", pady=5)
         ttk.Entry(frame, textvariable=self.vars['hop_limit'], width=10).grid(row=4, column=1, sticky="w", padx=5)
         
-        ttk.Checkbutton(frame, text="TX Enabled", 
+        ttk.Checkbutton(frame, text=tr("radio.tx_enabled"), 
                         variable=self.vars['tx_enabled']).grid(row=5, column=0, columnspan=2, 
                                                                sticky="w", pady=5)
     
@@ -455,29 +512,29 @@ class MeshtasticUltimateCenter:
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Abilitazione WiFi
-        enabled_frame = ttk.LabelFrame(frame, text="Abilitazione WiFi")
+        enabled_frame = ttk.LabelFrame(frame, text=tr("wifi.enable_title"))
         enabled_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Checkbutton(enabled_frame, text="Abilita WiFi sul dispositivo", 
+        ttk.Checkbutton(enabled_frame, text=tr("wifi.enable_device"), 
                        variable=self.vars['wifi_enabled']).pack(anchor="w", padx=10, pady=5)
         ttk.Label(enabled_frame, 
-                 text="(Il dispositivo deve supportare WiFi e avere l'antenna connessa)").pack(anchor="w", padx=10, pady=(0,5))
+                 text=tr("wifi.device_support_note")).pack(anchor="w", padx=10, pady=(0,5))
 
         # Configurazione rete
-        network_frame = ttk.LabelFrame(frame, text="Configurazione Rete WiFi")
+        network_frame = ttk.LabelFrame(frame, text=tr("wifi.network_config"))
         network_frame.pack(fill=tk.X, pady=10)
 
         # SSID
         ssid_frame = ttk.Frame(network_frame)
         ssid_frame.pack(fill=tk.X, pady=5, padx=10)
-        ttk.Label(ssid_frame, text="SSID (Nome rete):", width=15).pack(side=tk.LEFT)
+        ttk.Label(ssid_frame, text=tr("wifi.ssid"), width=15).pack(side=tk.LEFT)
         ttk.Entry(ssid_frame, textvariable=self.vars['wifi_ssid'], 
                   width=40).pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
 
         # Password
         psk_frame = ttk.Frame(network_frame)
         psk_frame.pack(fill=tk.X, pady=5, padx=10)
-        ttk.Label(psk_frame, text="Password:", width=15).pack(side=tk.LEFT)
+        ttk.Label(psk_frame, text=tr("green.password"), width=15).pack(side=tk.LEFT)
         psk_entry = ttk.Entry(psk_frame, textvariable=self.vars['wifi_psk'], 
                               width=40, show="*")
         psk_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
@@ -485,72 +542,67 @@ class MeshtasticUltimateCenter:
         def toggle_password():
             if psk_entry.cget('show') == '*':
                 psk_entry.config(show='')
-                show_btn.config(text='Nascondi')
+                show_btn.config(text=tr("wifi.hide"))
             else:
                 psk_entry.config(show='*')
-                show_btn.config(text='Mostra')
+                show_btn.config(text=tr("wifi.show"))
         
-        show_btn = ttk.Button(psk_frame, text="Mostra", command=toggle_password, width=8)
+        show_btn = ttk.Button(psk_frame, text=tr("wifi.show"), command=toggle_password, width=8)
         show_btn.pack(side=tk.LEFT)
 
         # Nota sulla sicurezza -
-        note = ttk.LabelFrame(frame, text="Nota sulla sicurezza")
+        note = ttk.LabelFrame(frame, text=tr("wifi.security_note_title"))
         note.pack(fill=tk.X, pady=20)
         ttk.Label(note, 
-                 text="La password WiFi viene inviata al dispositivo in chiaro.\n"
-                      "Assicurati che la connessione al dispositivo sia sicura (es. via cavo USB).\n\n"
-                      "Dopo aver applicato la configurazione, il dispositivo si connetterà alla rete WiFi\n"
-                      "specificata se nelle vicinanze e se le credenziali sono corrette.",
+                 text=tr("wifi.security_note"),
                  justify=tk.LEFT).pack(anchor="w", padx=10, pady=10)
         
         # Informazioni 
-        info_frame = ttk.LabelFrame(frame, text="Informazioni")
+        info_frame = ttk.LabelFrame(frame, text=tr("wifi.info_title"))
         info_frame.pack(fill=tk.X, pady=10)
         ttk.Label(info_frame, 
-                 text="Una volta connesso al WiFi, puoi connetterti al dispositivo via TCP usando il suo IP\n"
-                      "Alcuni dispositivi (es. T-Beam, T-Echo) hanno il WiFi integrato\n"
-                      "Verifica che il tuo firmware supporti la configurazione WiFi",
+                 text=tr("wifi.info_text"),
                  justify=tk.LEFT).pack(anchor="w", padx=10, pady=10)
     
     def _build_primary_tab(self):
         outer = self.tab_primary
         outer.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        head = ttk.LabelFrame(outer, text="Canale Primario")
+        head = ttk.LabelFrame(outer, text=tr("tabs.primary_channel"))
         head.pack(fill=tk.X, pady=5)
         
-        ttk.Label(head, text="Indice").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Label(head, text=tr("primary_channel.index")).grid(row=0, column=0, sticky="w", pady=5)
         ttk.Entry(head, textvariable=self.vars['channel_index'], width=10, state="readonly").grid(row=0, column=1, padx=5)
         
-        ttk.Label(head, text="Ruolo").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Label(head, text=tr("primary_channel.role")).grid(row=1, column=0, sticky="w", pady=5)
         ttk.Entry(head, textvariable=self.vars['channel_role'], width=20, state="readonly").grid(row=1, column=1, padx=5)
         
-        ttk.Label(head, text="Nome").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Label(head, text=tr("primary_channel.name")).grid(row=2, column=0, sticky="w", pady=5)
         name_entry = ttk.Entry(head, textvariable=self.vars['channel_name'], width=30)
         name_entry.grid(row=2, column=1, padx=5)
         name_entry.bind("<FocusOut>", lambda e: self._validate_channel_name())
         
-        ttk.Checkbutton(head, text="Uplink", variable=self.vars['channel_uplink']).grid(row=3, column=0, sticky="w")
-        ttk.Checkbutton(head, text="Downlink", variable=self.vars['channel_downlink']).grid(row=3, column=1, sticky="w")
+        ttk.Checkbutton(head, text=tr("primary_channel.uplink"), variable=self.vars['channel_uplink']).grid(row=3, column=0, sticky="w")
+        ttk.Checkbutton(head, text=tr("primary_channel.downlink"), variable=self.vars['channel_downlink']).grid(row=3, column=1, sticky="w")
         
-        ttk.Label(head, text="PSK").grid(row=4, column=0, sticky="w", pady=5)
+        ttk.Label(head, text=tr("primary_channel.psk")).grid(row=4, column=0, sticky="w", pady=5)
         ttk.Entry(head, textvariable=self.vars['channel_psk'], width=40, state="readonly").grid(row=4, column=1, padx=5)
         
-        write_frame = ttk.LabelFrame(outer, text="Opzioni scrittura")
+        write_frame = ttk.LabelFrame(outer, text=tr("primary_channel.write_options"))
         write_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Checkbutton(write_frame, text="Consenti scrittura nome", 
+        ttk.Checkbutton(write_frame, text=tr("primary_channel.allow_write_name"), 
                        variable=self.vars['channel_write_name']).pack(anchor="w")
-        ttk.Checkbutton(write_frame, text="Consenti scrittura uplink/downlink", 
+        ttk.Checkbutton(write_frame, text=tr("primary_channel.allow_write_flags"), 
                        variable=self.vars['channel_write_flags']).pack(anchor="w")
         
-        ttk.Button(outer, text="Rileggi", command=self.read_primary_channel).pack(pady=10)
+        ttk.Button(outer, text=tr("primary_channel.reread"), command=self.read_primary_channel).pack(pady=10)
     
     def _build_channels_tab(self):
         frame = self.tab_channels
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        ttk.Button(frame, text="Aggiorna canali", command=self.read_channels).pack(anchor="w", pady=5)
+        ttk.Button(frame, text=tr("channels.update_channels"), command=self.read_channels).pack(anchor="w", pady=5)
         
         self.channels_text = scrolledtext.ScrolledText(frame, wrap=tk.WORD,
             bg=UI.PANEL, fg=UI.FG, font=('Consolas',10))
@@ -563,11 +615,11 @@ class MeshtasticUltimateCenter:
         controls = ttk.Frame(outer)
         controls.pack(fill=tk.X, pady=5)
         
-        ttk.Button(controls, text="Aggiorna", command=self.refresh_mesh).pack(side=tk.LEFT, padx=2)
-        ttk.Checkbutton(controls, text="Includi self", variable=self.vars['mesh_include_self']).pack(side=tk.LEFT, padx=5)
-        ttk.Checkbutton(controls, text="Solo recenti", variable=self.vars['mesh_only_recent']).pack(side=tk.LEFT, padx=5)
+        ttk.Button(controls, text=tr("common.refresh"), command=self.refresh_mesh).pack(side=tk.LEFT, padx=2)
+        ttk.Checkbutton(controls, text=tr("mesh.include_self"), variable=self.vars['mesh_include_self']).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(controls, text=tr("mesh.only_recent"), variable=self.vars['mesh_only_recent']).pack(side=tk.LEFT, padx=5)
         
-        ttk.Label(controls, text="Secondi:").pack(side=tk.LEFT, padx=(10,2))
+        ttk.Label(controls, text=tr("mesh.seconds")).pack(side=tk.LEFT, padx=(10,2))
         ttk.Entry(controls, textvariable=self.vars['mesh_recent_secs'], width=8).pack(side=tk.LEFT)
         
         ttk.Label(controls, textvariable=self.vars['mesh_selected']).pack(side=tk.RIGHT, padx=5)
@@ -578,7 +630,7 @@ class MeshtasticUltimateCenter:
         col_widths = {"id":120, "short":80, "long":150, "hw":100, "role":80, 
                      "hops":50, "snr":60, "distance":90, "lastheard":120}
         for col in columns:
-            self.mesh_tree.heading(col, text=col.upper())
+            self.mesh_tree.heading(col, text=tr(f"columns.{col}"))
             self.mesh_tree.column(col, width=col_widths.get(col, 80))
         
         scroll = ttk.Scrollbar(outer, orient=tk.VERTICAL, command=self.mesh_tree.yview)
@@ -600,22 +652,22 @@ class MeshtasticUltimateCenter:
         toolbar = ttk.Frame(frame)
         toolbar.pack(fill=tk.X, pady=5)
         
-        ttk.Label(toolbar, text="Filtro:").pack(side=tk.LEFT)
+        ttk.Label(toolbar, text=tr("nodes.filter")).pack(side=tk.LEFT)
         ttk.Entry(toolbar, textvariable=self.vars['filter_text'], width=20).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(toolbar, text="Aggiorna Nodi", command=self.refresh_nodes).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text=tr("nodes.refresh_nodes"), command=self.refresh_nodes).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(toolbar, text="Preferiti", command=self.manage_favorites).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Pulisci", command=self.confirm_clean_nodes,
+        ttk.Button(toolbar, text=tr("nodes.favorites"), command=self.manage_favorites).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text=tr("nodes.clean"), command=self.confirm_clean_nodes,
                   style='Danger.TButton').pack(side=tk.LEFT, padx=2)
-        ttk.Checkbutton(toolbar, text="Preserva MQTT", variable=self.vars['preserve_mqtt']).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(toolbar, text=tr("nodes.preserve_mqtt"), variable=self.vars['preserve_mqtt']).pack(side=tk.LEFT, padx=5)
         
         columns = ("id", "nome", "tipo", "fav", "hops", "snr", "rssi", "qual", "last")
         self.nodes_tree = ttk.Treeview(frame, columns=columns, show="headings", height=20)
         
         col_widths = {"id":120, "nome":150, "tipo":60, "fav":40, "hops":50, "snr":60, "rssi":60, "qual":70, "last":120}
         for col in columns:
-            self.nodes_tree.heading(col, text=col.upper())
+            self.nodes_tree.heading(col, text=tr(f"columns.{col}"))
             self.nodes_tree.column(col, width=col_widths.get(col, 80), anchor="center")
         
         scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.nodes_tree.yview)
@@ -634,55 +686,55 @@ class MeshtasticUltimateCenter:
         frame = self.tab_chat
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        ttk.Label(frame, text="Messaggio sul canale:").pack(anchor="w")
+        ttk.Label(frame, text=tr("chat.channel_message")).pack(anchor="w")
         
         self.chat_text = tk.Text(frame, height=6, wrap=tk.WORD,
             bg=UI.PANEL, fg=UI.FG, font=('',11))
         self.chat_text.pack(fill=tk.X, pady=10)
         
-        ttk.Button(frame, text="Invia", command=self.send_chat).pack()
+        ttk.Button(frame, text=tr("common.send"), command=self.send_chat).pack()
     
     def _build_direct_tab(self):
         frame = self.tab_direct
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # Destinatario
-        ttk.Label(frame, text="Destinatario:").pack(anchor="w")
+        ttk.Label(frame, text=tr("direct.recipient")).pack(anchor="w")
         dest_frame = ttk.Frame(frame)
         dest_frame.pack(fill=tk.X, pady=5)
         ttk.Entry(dest_frame, textvariable=self.vars['dest'], width=30).pack(side=tk.LEFT)
-        ttk.Button(dest_frame, text="Lista nodi", command=self.show_node_list).pack(side=tk.LEFT, padx=5)
+        ttk.Button(dest_frame, text=tr("direct.node_list"), command=self.show_node_list).pack(side=tk.LEFT, padx=5)
         
         # Opzioni ACK
-        ack_frame = ttk.LabelFrame(frame, text="Opzioni di consegna")
+        ack_frame = ttk.LabelFrame(frame, text=tr("direct.delivery_options"))
         ack_frame.pack(fill=tk.X, pady=10)
         
         ack_check_frame = ttk.Frame(ack_frame)
         ack_check_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Checkbutton(ack_check_frame, text="Richiedi conferma di consegna (ACK)", 
+        ttk.Checkbutton(ack_check_frame, text=tr("direct.request_ack"), 
                        variable=self.vars['use_ack']).pack(side=tk.LEFT)
         
         timeout_frame = ttk.Frame(ack_frame)
         timeout_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(timeout_frame, text="Timeout (secondi):").pack(side=tk.LEFT)
+        ttk.Label(timeout_frame, text=tr("direct.timeout_seconds")).pack(side=tk.LEFT)
         ttk.Spinbox(timeout_frame, from_=5, to=120, textvariable=self.vars['ack_timeout'],
                    width=5).pack(side=tk.LEFT, padx=10)
         
         notif_frame = ttk.Frame(ack_frame)
         notif_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Checkbutton(notif_frame, text="Mostra notifiche consegna", 
+        ttk.Checkbutton(notif_frame, text=tr("direct.show_delivery_notifications"), 
                        variable=self.vars['show_ack_notifications']).pack(side=tk.LEFT)
         
         retry_frame = ttk.Frame(ack_frame)
         retry_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Checkbutton(retry_frame, text="Riprova automaticamente in caso di timeout", 
+        ttk.Checkbutton(retry_frame, text=tr("direct.auto_retry_timeout"), 
                        variable=self.vars['auto_retry_on_timeout']).pack(side=tk.LEFT)
-        ttk.Label(retry_frame, text="Max tentativi:").pack(side=tk.LEFT, padx=(20,5))
+        ttk.Label(retry_frame, text=tr("direct.max_attempts")).pack(side=tk.LEFT, padx=(20,5))
         ttk.Spinbox(retry_frame, from_=1, to=10, textvariable=self.vars['max_retries'],
                    width=3).pack(side=tk.LEFT)
         
         # Messaggio
-        ttk.Label(frame, text="Messaggio:").pack(anchor="w", pady=(10,0))
+        ttk.Label(frame, text=tr("direct.message")).pack(anchor="w", pady=(10,0))
         self.direct_text = tk.Text(frame, height=5, wrap=tk.WORD,
             bg=UI.PANEL, fg=UI.FG, font=('',11))
         self.direct_text.pack(fill=tk.X, pady=5)
@@ -690,22 +742,22 @@ class MeshtasticUltimateCenter:
         # Pulsanti invio
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(btn_frame, text="Invia", command=self.send_direct).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Invia con conferma", 
+        ttk.Button(btn_frame, text=tr("common.send"), command=self.send_direct).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text=tr("direct.send_with_ack"), 
                   command=self.send_direct_with_ack).pack(side=tk.LEFT, padx=2)
         
         # Cronologia
-        ttk.Label(frame, text="Cronologia messaggi:").pack(anchor="w", pady=(15,5))
+        ttk.Label(frame, text=tr("direct.message_history")).pack(anchor="w", pady=(15,5))
         
         columns = ("ora", "dest", "msg", "stato", "tempo", "id")
         self.history_tree = ttk.Treeview(frame, columns=columns, show="headings", height=8)
         
-        self.history_tree.heading("ora", text="Ora")
-        self.history_tree.heading("dest", text="Destinatario")
-        self.history_tree.heading("msg", text="Messaggio")
-        self.history_tree.heading("stato", text="Stato")
-        self.history_tree.heading("tempo", text="Tempo")
-        self.history_tree.heading("id", text="ID")
+        self.history_tree.heading("ora", text=tr("columns.time"))
+        self.history_tree.heading("dest", text=tr("columns.recipient"))
+        self.history_tree.heading("msg", text=tr("columns.message"))
+        self.history_tree.heading("stato", text=tr("columns.status"))
+        self.history_tree.heading("tempo", text=tr("columns.delivery_time"))
+        self.history_tree.heading("id", text=tr("columns.id"))
         
         self.history_tree.column("ora", width=80)
         self.history_tree.column("dest", width=120)
@@ -737,11 +789,11 @@ class MeshtasticUltimateCenter:
         toolbar = ttk.Frame(frame)
         toolbar.pack(fill=tk.X, pady=5)
         
-        ttk.Button(toolbar, text="Aggiorna", command=self.refresh_message_stats).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Pulisci storico", command=self.clear_message_history).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Esporta CSV", command=self.export_message_history).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text=tr("common.refresh"), command=self.refresh_message_stats).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text=tr("messages.clear_history"), command=self.clear_message_history).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text=tr("messages.export_csv"), command=self.export_message_history).pack(side=tk.LEFT, padx=2)
         
-        stats_frame = ttk.LabelFrame(frame, text="Statistiche Consegne")
+        stats_frame = ttk.LabelFrame(frame, text=tr("messages.delivery_stats"))
         stats_frame.pack(fill=tk.X, pady=10, padx=5)
         
         self.stats_text = tk.Text(stats_frame, height=5, bg=UI.PANEL, fg=UI.FG, wrap=tk.WORD)
@@ -750,15 +802,15 @@ class MeshtasticUltimateCenter:
         filter_frame = ttk.Frame(frame)
         filter_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(filter_frame, text="Filtra per stato:").pack(side=tk.LEFT)
-        self.filter_state = tk.StringVar(value="Tutti")
+        ttk.Label(filter_frame, text=tr("messages.filter_by_status")).pack(side=tk.LEFT)
+        self.filter_state = tk.StringVar(value=tr("messages.all"))
         state_combo = ttk.Combobox(filter_frame, textvariable=self.filter_state,
-                                   values=["Tutti", "Consegnato", "In attesa", "Timeout", "Inviato"],
+                                   values=[tr("messages.all"), tr("messages.delivered"), tr("messages.pending"), tr("messages.timeout"), tr("messages.sent")],
                                    width=15, state="readonly")
         state_combo.pack(side=tk.LEFT, padx=5)
         state_combo.bind('<<ComboboxSelected>>', lambda e: self.filter_messages())
         
-        ttk.Label(filter_frame, text="Cerca:").pack(side=tk.LEFT, padx=(20,5))
+        ttk.Label(filter_frame, text=tr("messages.search")).pack(side=tk.LEFT, padx=(20,5))
         self.search_var = tk.StringVar()
         search_entry = ttk.Entry(filter_frame, textvariable=self.search_var, width=20)
         search_entry.pack(side=tk.LEFT)
@@ -767,13 +819,13 @@ class MeshtasticUltimateCenter:
         columns = ("ora", "dest", "msg", "stato", "tempo", "tentativi", "id")
         self.messages_tree = ttk.Treeview(frame, columns=columns, show="headings", height=15)
         
-        self.messages_tree.heading("ora", text="Ora Invio")
-        self.messages_tree.heading("dest", text="Destinatario")
-        self.messages_tree.heading("msg", text="Messaggio")
-        self.messages_tree.heading("stato", text="Stato")
-        self.messages_tree.heading("tempo", text="Tempo (s)")
-        self.messages_tree.heading("tentativi", text="Tentativi")
-        self.messages_tree.heading("id", text="ID")
+        self.messages_tree.heading("ora", text=tr("columns.sent_time"))
+        self.messages_tree.heading("dest", text=tr("columns.recipient"))
+        self.messages_tree.heading("msg", text=tr("columns.message"))
+        self.messages_tree.heading("stato", text=tr("columns.status"))
+        self.messages_tree.heading("tempo", text=tr("columns.delivery_time"))
+        self.messages_tree.heading("tentativi", text=tr("columns.attempts"))
+        self.messages_tree.heading("id", text=tr("columns.id"))
         
         self.messages_tree.column("ora", width=120)
         self.messages_tree.column("dest", width=120)
@@ -802,61 +854,85 @@ class MeshtasticUltimateCenter:
             bg=UI.PANEL, fg=UI.FG, font=('Consolas',10))
         self.stats_display.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Button(frame, text="Aggiorna", command=self.update_stats).pack(pady=5)
+        ttk.Button(frame, text=tr("common.refresh"), command=self.update_stats).pack(pady=5)
     
     def _build_settings_tab(self):
         frame = self.tab_settings
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
+        # Lingua interfaccia
+        lang_frame = ttk.LabelFrame(frame, text=tr("settings.language"))
+        lang_frame.pack(fill=tk.X, pady=10)
+
+        lang_row = ttk.Frame(lang_frame)
+        lang_row.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(lang_row, text=tr("settings.language")).pack(side=tk.LEFT)
+        lang_combo = ttk.Combobox(
+            lang_row,
+            textvariable=self.vars['language'],
+            values=self._language_labels(),
+            width=10,
+            state="readonly"
+        )
+        lang_combo.pack(side=tk.LEFT, padx=10)
+        lang_combo.bind("<<ComboboxSelected>>", self.on_language_change)
+
+        ttk.Label(
+            lang_frame,
+            text=tr("settings.language_restart_note"),
+            justify=tk.LEFT
+        ).pack(anchor="w", padx=10, pady=(0, 8))
+
         # Impostazioni ACK
-        ack_settings = ttk.LabelFrame(frame, text="Impostazioni Conferme (ACK)")
+        ack_settings = ttk.LabelFrame(frame, text=tr("settings.ack_settings"))
         ack_settings.pack(fill=tk.X, pady=10)
         
-        ttk.Checkbutton(ack_settings, text="Abilita notifiche desktop per consegna",
+        ttk.Checkbutton(ack_settings, text=tr("settings.enable_desktop_notifications"),
                        variable=self.vars['show_ack_notifications']).pack(anchor="w", padx=10, pady=2)
         
-        ttk.Checkbutton(ack_settings, text="Ritenta automaticamente in caso di timeout",
+        ttk.Checkbutton(ack_settings, text=tr("settings.auto_retry"),
                        variable=self.vars['auto_retry_on_timeout']).pack(anchor="w", padx=10, pady=2)
         
         timeout_frame = ttk.Frame(ack_settings)
         timeout_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(timeout_frame, text="Timeout predefinito (secondi):").pack(side=tk.LEFT)
+        ttk.Label(timeout_frame, text=tr("settings.default_timeout")).pack(side=tk.LEFT)
         ttk.Spinbox(timeout_frame, from_=5, to=120, textvariable=self.vars['ack_timeout'],
                    width=5).pack(side=tk.LEFT, padx=10)
         
         retry_frame = ttk.Frame(ack_settings)
         retry_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(retry_frame, text="Numero massimo tentativi:").pack(side=tk.LEFT)
+        ttk.Label(retry_frame, text=tr("settings.max_retries")).pack(side=tk.LEFT)
         ttk.Spinbox(retry_frame, from_=1, to=10, textvariable=self.vars['max_retries'],
                    width=5).pack(side=tk.LEFT, padx=10)
         
         # RSSI
         rssi_f = ttk.Frame(frame)
         rssi_f.pack(fill=tk.X, pady=5)
-        ttk.Label(rssi_f, text="Soglia RSSI:").pack(side=tk.LEFT)
+        ttk.Label(rssi_f, text=tr("settings.rssi_threshold")).pack(side=tk.LEFT)
         ttk.Scale(rssi_f, from_=-100, to=-50, variable=self.vars['rssi_threshold'],
                  orient=tk.HORIZONTAL, length=200).pack(side=tk.LEFT, padx=10)
         ttk.Label(rssi_f, textvariable=self.vars['rssi_threshold']).pack(side=tk.LEFT)
         
         ref_f = ttk.Frame(frame)
         ref_f.pack(fill=tk.X, pady=5)
-        ttk.Checkbutton(ref_f, text="Auto-refresh ogni", variable=self.vars['auto_refresh']).pack(side=tk.LEFT)
+        ttk.Checkbutton(ref_f, text=tr("settings.auto_refresh_every"), variable=self.vars['auto_refresh']).pack(side=tk.LEFT)
         ttk.Spinbox(ref_f, from_=10, to=300, textvariable=self.vars['refresh_interval'],
                    width=5).pack(side=tk.LEFT, padx=5)
         ttk.Label(ref_f, text="secondi").pack(side=tk.LEFT)
         
         debug_f = ttk.LabelFrame(frame, text="Debug")
         debug_f.pack(fill=tk.X, pady=10)
-        ttk.Checkbutton(debug_f, text="Mostra debug canali", 
+        ttk.Checkbutton(debug_f, text=tr("settings.show_channel_debug"), 
                        variable=self.vars['show_channel_debug']).pack(anchor="w", padx=5)
         
         info_f = ttk.LabelFrame(frame, text="Info")
         info_f.pack(fill=tk.X, pady=10)
         ttk.Label(info_f, 
-                 text="Persistenza: 1. Cancella nodi 2. Premi Reboot",
+                 text=tr("settings.persistence_note"),
                  foreground='orange').pack(padx=5, pady=5)
         
-        ttk.Button(frame, text="Salva impostazioni", command=self.save_settings).pack(pady=20)
+        ttk.Button(frame, text=tr("settings.save_settings"), command=self.save_settings).pack(pady=20)
     
     def _build_statusbar(self):
         status = ttk.Frame(self.root)
@@ -873,12 +949,20 @@ class MeshtasticUltimateCenter:
         self.clock_label.pack(side=tk.RIGHT)
     
     def _update_conn_fields(self):
+        before_widget = getattr(self, "language_label", None)
+
         if self.vars['conn_type'].get() == "serial":
             self.host_entry.pack_forget()
-            self.port_combo.pack(side=tk.LEFT, padx=5)
+            if before_widget:
+                self.port_combo.pack(side=tk.LEFT, padx=5, before=before_widget)
+            else:
+                self.port_combo.pack(side=tk.LEFT, padx=5)
         else:
             self.port_combo.pack_forget()
-            self.host_entry.pack(side=tk.LEFT, padx=5)
+            if before_widget:
+                self.host_entry.pack(side=tk.LEFT, padx=5, before=before_widget)
+            else:
+                self.host_entry.pack(side=tk.LEFT, padx=5)
     
     def _update_clock(self):
         self.clock_label.config(text=datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
@@ -887,7 +971,7 @@ class MeshtasticUltimateCenter:
     def _validate_channel_name(self, event=None):
         name = self.vars['channel_name'].get().strip()
         if name and len(name.encode('utf-8')) > 11:
-            self.log("Nome canale troppo lungo (max 11 byte)", "warn")
+            self.log(tr("channel.name_too_long"), "warn")
             return False
         return True
     
@@ -902,33 +986,33 @@ class MeshtasticUltimateCenter:
             if self.vars['conn_type'].get() == "serial":
                 port = self.vars['port'].get().strip()
                 if not port:
-                    messagebox.showwarning("Attenzione", "Inserisci una porta")
+                    messagebox.showwarning(tr("common.warning"), tr("connection.insert_port"))
                     return
                 ok = self.device.connect_serial(port)
                 conn_str = port
             else:
                 host = self.vars['host'].get().strip()
                 if not host:
-                    messagebox.showwarning("Attenzione", "Inserisci un host")
+                    messagebox.showwarning(tr("common.warning"), tr("connection.insert_host"))
                     return
                 ok = self.device.connect_tcp(host)
                 conn_str = host
             
             if ok:
-                self.vars['status'].set(f"Connesso a {conn_str}")
-                self.log(f"Connesso a {conn_str}", "success")
+                self.vars['status'].set(tr("connection.connected_to", target=conn_str))
+                self.log(tr("connection.connected_to", target=conn_str), "success")
                 self.refresh_nodes()
                 self.root.after(2000, self.read_config)
             else:
-                self.log("Connessione fallita", "error")
+                self.log(tr("connection.connection_failed"), "error")
         except Exception as e:
-            self.log(f"Errore connessione: {e}", "error")
-            messagebox.showerror("Errore", str(e))
+            self.log(tr("connection.connection_error_detail", error=e), "error")
+            messagebox.showerror(tr("common.error"), str(e))
     
     def disconnect(self):
         self.device.disconnect()
-        self.vars['status'].set("Disconnesso")
-        self.log("Disconnesso", "success")
+        self.vars['status'].set(tr("connection.disconnected"))
+        self.log(tr("connection.disconnected"), "success")
         self.nodes_tree.delete(*self.nodes_tree.get_children())
         self.pending_messages.clear()
         self._update_pending_count()
@@ -938,17 +1022,17 @@ class MeshtasticUltimateCenter:
     
     def refresh_nodes(self):
         if not self.device.connected:
-            self.log("Non connesso", "warn")
+            self.log(tr("connection.not_connected"), "warn")
             return
         nodes = self.device.get_nodes()
         self.ui_queue.put(('update_nodes', nodes))
     
     def read_config(self):
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso")
+            messagebox.showwarning(tr("common.warning"), tr("connection.not_connected"))
             return
         
-        self.log("Lettura configurazione...", "info")
+        self.log(tr("config.reading"), "info")
         
         try:
             self.device.wait_for_config(timeout=3.0)
@@ -956,13 +1040,13 @@ class MeshtasticUltimateCenter:
             local_cfg, module_cfg = self.device.read_config()
             
             if not local_cfg:
-                self.log("localConfig non disponibile", "warn")
+                self.log(tr("config.local_config_missing"), "warn")
                 return
             
             long_name, short_name = self.device.read_local_identity()
             self.vars['long_name'].set(long_name)
             self.vars['short_name'].set(short_name)
-            self.log(f"Identita: {long_name} / {short_name}", "info")
+            self.log(tr("config.identity_read", long_name=long_name, short_name=short_name), "info")
             
             if hasattr(local_cfg, 'position'):
                 pos = local_cfg.position
@@ -1018,15 +1102,15 @@ class MeshtasticUltimateCenter:
                 self.vars['wifi_enabled'].set(bool(utils.safe_attr(net, 'wifi_enabled', False)))
                 self.vars['wifi_ssid'].set(str(utils.safe_attr(net, 'wifi_ssid', '') or ''))
                 self.vars['wifi_psk'].set(str(utils.safe_attr(net, 'wifi_psk', '') or ''))
-                self.log("Configurazione WiFi letta", "wifi")
+                self.log(tr("config.wifi_read"), "wifi")
             
             self.read_primary_channel()
             self.read_channels()
             
-            self.log("Configurazione letta con successo", "success")
+            self.log(tr("config.read_success"), "success")
             
         except Exception as e:
-            self.log(f"Errore lettura config: {e}", "error")
+            self.log(tr("config.read_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "muted")
     
@@ -1047,7 +1131,7 @@ class MeshtasticUltimateCenter:
         try:
             idx, ch = self.device.find_primary_channel()
             if not ch:
-                self.log("Canale primario non trovato", "warn")
+                self.log(tr("channel.primary_not_found"), "warn")
                 return
             
             self.current_primary_channel_index = idx
@@ -1061,23 +1145,23 @@ class MeshtasticUltimateCenter:
                 self.vars['channel_downlink'].set(bool(utils.safe_attr(settings, 'downlink_enabled', False)))
                 
                 psk = utils.safe_attr(settings, 'psk', None)
-                self.vars['channel_psk'].set("Presente" if psk else "Vuota")
+                self.vars['channel_psk'].set(tr("channel.psk_present") if psk else tr("channel.psk_empty"))
             
-            self.log(f"Canale primario: index={idx}", "info")
+            self.log(tr("channel.primary_index", index=idx), "info")
         except Exception as e:
-            self.log(f"Errore lettura canale: {e}", "error")
+            self.log(tr("channel.read_error", error=e), "error")
     
     def read_channels(self):
         try:
             channels = self.device.read_channels()
             primary_idx, _ = self.device.find_primary_channel()
             
-            lines = ["CANALI DEL NODO", "="*60, ""]
+            lines = [tr("channel.node_channels"), "="*60, ""]
             
             for ch in channels:
                 idx = getattr(ch, 'index', 0)
                 role = self.device._get_channel_role_name(ch)
-                marker = " <== PRIMARY" if primary_idx == idx else ""
+                marker = tr("channel.primary_marker") if primary_idx == idx else ""
                 lines.append(f"[{idx}] role={role}{marker}")
                 
                 settings = self.device.get_channel_settings(ch)
@@ -1093,7 +1177,7 @@ class MeshtasticUltimateCenter:
             self.channels_text.insert(tk.END, "\n".join(lines))
             
         except Exception as e:
-            self.log(f"Errore lettura canali: {e}", "error")
+            self.log(tr("channel.read_channels_error", error=e), "error")
     
     def refresh_mesh(self):
         if not self.device.connected: return
@@ -1147,10 +1231,10 @@ class MeshtasticUltimateCenter:
                     r['hops'], r['snr'], r['dist'], r['last']
                 ))
             
-            self.vars['mesh_selected'].set(f"Nodi: {len(rows)}")
+            self.vars['mesh_selected'].set(tr("logs.nodes_count", count=len(rows)))
             
         except Exception as e:
-            self.log(f"Errore mesh: {e}", "error")
+            self.log(tr("logs.mesh_error", error=e), "error")
     
     def _find_local_pos(self):
         nodes = self.device.get_nodes()
@@ -1166,17 +1250,17 @@ class MeshtasticUltimateCenter:
         vals = item['values']
         if vals:
             self.mesh_detail.delete(1.0, tk.END)
-            self.mesh_detail.insert(tk.END, f"Dettaglio nodo {vals[0]}\n")
+            self.mesh_detail.insert(tk.END, tr("mesh.detail_title", node_id=vals[0]) + "\n")
             self.mesh_detail.insert(tk.END, f"Short: {vals[1]}\nLong: {vals[2]}\nHW: {vals[3]}\nRole: {vals[4]}")
     
     def send_chat(self):
         msg = self.chat_text.get(1.0, tk.END).strip()
         if not msg:
-            messagebox.showwarning("Attenzione", "Scrivi un messaggio")
+            messagebox.showwarning(tr("common.warning"), tr("chat.empty_message"))
             return
         
         if self.device.send_text(msg):
-            self.log(f"Canale: {msg}", "channel")
+            self.log(tr("chat.channel_log", message=msg), "channel")
             self.chat_text.delete(1.0, tk.END)
     
     # Invia messaggio diretto senza ACK
@@ -1193,7 +1277,7 @@ class MeshtasticUltimateCenter:
         dest = self.vars['dest'].get().strip()
         
         if not msg or not dest:
-            messagebox.showwarning("Attenzione", "Inserisci destinatario e messaggio")
+            messagebox.showwarning(tr("common.warning"), tr("direct.recipient_required") + " / " + tr("direct.message_required"))
             return
         
         if use_ack is None:
@@ -1216,15 +1300,15 @@ class MeshtasticUltimateCenter:
         try:
             if use_ack:
                 msg_id = self.device.send_text_with_ack(msg, dest, callback=on_ack_callback)
-                status_text = "In attesa"
+                status_text = tr("messages.pending")
                 status_tag = 'pending'
             else:
                 msg_id = self.device.send_text(msg, dest)
-                status_text = "Inviato"
+                status_text = tr("messages.sent")
                 status_tag = 'sent'
             
             if msg_id:
-                log_msg = f"Inviato a {dest} (ID: {msg_id})" + (" con ACK" if use_ack else "")
+                log_msg = tr("logs.sent_to", dest=dest, msg_id=msg_id, ack=(tr("logs.with_ack") if use_ack else ""))
                 self.log(log_msg, "info" if not use_ack else "ack_pending")
                 self.direct_text.delete(1.0, tk.END)
                 
@@ -1249,12 +1333,12 @@ class MeshtasticUltimateCenter:
                 
                 self._update_pending_count()
             else:
-                self.log(f"Invio fallito - nessun ID restituito", "error")
-                messagebox.showerror("Errore", "Invio messaggio fallito")
+                self.log(tr("logs.send_failed_no_id"), "error")
+                messagebox.showerror(tr("common.error"), tr("notifications.failed_body"))
                 
         except Exception as e:
-            self.log(f"Errore invio: {e}", "error")
-            messagebox.showerror("Errore", f"Invio fallito: {e}")
+            self.log(tr("logs.send_error", error=e), "error")
+            messagebox.showerror(tr("common.error"), tr("logs.send_failed", error=e))
 
     #######################################################################################################################################
 
@@ -1272,17 +1356,17 @@ class MeshtasticUltimateCenter:
                 if self.history_tree.exists(item_id):
                     values = list(self.history_tree.item(item_id, 'values'))
                     if success:
-                        values[3] = f"Consegnato ({delivery_time:.1f}s)"
+                        values[3] = f"{tr('messages.delivered')} ({delivery_time:.1f}s)"
                         values[4] = f"{delivery_time:.1f}"
                         self.history_tree.item(item_id, values=values, tags=('delivered',))
-                        self.log(f"Messaggio {msg_id} consegnato in {delivery_time:.1f}s", "ack_delivered")
+                        self.log(tr("logs.message_delivered", msg_id=msg_id, seconds=delivery_time), "ack_delivered")
                         if self.vars['show_ack_notifications'].get():
-                            self._show_notification("Messaggio consegnato", f"A {dest} in {delivery_time:.1f}s")
+                            self._show_notification(tr("notifications.delivered_title"), tr("notifications.delivered_body_short", dest=dest, seconds=delivery_time))
                     else:
-                        values[3] = "Timeout"
+                        values[3] = tr("messages.timeout")
                         values[4] = "-"
                         self.history_tree.item(item_id, values=values, tags=('timeout',))
-                        self.log(f"Timeout messaggio {msg_id}", "ack_timeout")
+                        self.log(tr("logs.message_timeout", msg_id=msg_id), "ack_timeout")
                         if self.vars['auto_retry_on_timeout'].get() and pending['retries'] < self.vars['max_retries'].get():
                             pending['retries'] += 1
                             self.root.after(2000, lambda: self._retry_message(pending))
@@ -1292,7 +1376,7 @@ class MeshtasticUltimateCenter:
             self._update_pending_count()
             self.refresh_message_stats()
         except Exception as e:
-            self.log(f"Errore aggiornamento ACK: {e}", "error")    
+            self.log(tr("logs.ack_update_error", error=e), "error")    
         
     ####################################################################################
     # Ritenta per un messaggio scaduto
@@ -1354,8 +1438,8 @@ class MeshtasticUltimateCenter:
                 timeout=3
             )
         except:
-            self.root.title(f"Notifica: {title} - {message}")
-            self.root.after(3000, lambda: self.root.title("Meshtastic Ultimate Center v4.2 - aiutocomputerhelp.it"))
+            self.root.title(tr("notifications.window_title", title=title, message=message))
+            self.root.after(3000, lambda: self.root.title(tr("app.title")))
     
     # Menu contestuale per la cronologia
     def show_history_menu(self, event):
@@ -1367,11 +1451,11 @@ class MeshtasticUltimateCenter:
         values = item['values']
         
         menu = tk.Menu(self.root, tearoff=0, bg=UI.PANEL, fg=UI.FG)
-        menu.add_command(label="Ritenta", command=lambda: self._retry_selected(values))
-        menu.add_command(label="Copia ID", command=lambda: self.root.clipboard_append(str(values[5])))
-        menu.add_command(label="Copia messaggio", command=lambda: self.root.clipboard_append(str(values[2])))
+        menu.add_command(label=tr("message_menu.retry"), command=lambda: self._retry_selected(values))
+        menu.add_command(label=tr("message_menu.copy_id"), command=lambda: self.root.clipboard_append(str(values[5])))
+        menu.add_command(label=tr("message_menu.copy_message"), command=lambda: self.root.clipboard_append(str(values[2])))
         menu.add_separator()
-        menu.add_command(label="Elimina", command=lambda: self.history_tree.delete(sel[0]))
+        menu.add_command(label=tr("message_menu.delete"), command=lambda: self.history_tree.delete(sel[0]))
         
         menu.post(event.x_root, event.y_root)
     
@@ -1383,15 +1467,15 @@ class MeshtasticUltimateCenter:
             msg = values[2].replace('...', '')
             
             dialog = tk.Toplevel(self.root)
-            dialog.title("Ritenta messaggio")
+            dialog.title(tr("retry_dialog.title"))
             dialog.geometry("400x200")
             dialog.configure(bg=UI.BG)
             
-            ttk.Label(dialog, text="Destinatario:").pack(anchor="w", padx=10, pady=5)
+            ttk.Label(dialog, text=tr("direct.recipient")).pack(anchor="w", padx=10, pady=5)
             dest_var = tk.StringVar(value=dest)
             ttk.Entry(dialog, textvariable=dest_var, width=40).pack(fill=tk.X, padx=10)
             
-            ttk.Label(dialog, text="Messaggio:").pack(anchor="w", padx=10, pady=5)
+            ttk.Label(dialog, text=tr("direct.message")).pack(anchor="w", padx=10, pady=5)
             msg_text = tk.Text(dialog, height=4, bg=UI.PANEL, fg=UI.FG)
             msg_text.insert(1.0, msg)
             msg_text.pack(fill=tk.X, padx=10)
@@ -1405,7 +1489,7 @@ class MeshtasticUltimateCenter:
                     self.send_direct_with_ack()
                     dialog.destroy()
             
-            ttk.Button(dialog, text="Invia con ACK", command=do_retry).pack(pady=10)
+            ttk.Button(dialog, text=tr("retry_dialog.send_with_ack"), command=do_retry).pack(pady=10)
     
 
     def refresh_message_stats(self):
@@ -1417,16 +1501,17 @@ class MeshtasticUltimateCenter:
             stats = self.device.get_message_stats()
             history = self.device.get_message_history(limit=200)
             
-            stats_text = f"""STATISTICHE MESSAGGI
-{'='*50}
-
-Totale messaggi: {stats['total']}
-Consegnati: {stats['delivered']} ({stats['success_rate']:.1f}%)
-In attesa: {stats['pending']}
-Timeout: {stats['timeout']}
-Ricevuti: {stats.get('received', 0)}
-Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
-    """
+            stats_text = "\n".join([
+                tr("messages.stats_title"),
+                "=" * 50,
+                "",
+                tr("messages.total_messages", count=stats['total']),
+                tr("messages.delivered_count", count=stats['delivered'], rate=stats['success_rate']),
+                tr("messages.pending_count", count=stats['pending']),
+                tr("messages.timeout_count", count=stats['timeout']),
+                tr("messages.received_count", count=stats.get('received', 0)),
+                tr("messages.average_delivery_time", seconds=stats['avg_delivery_time'])
+            ])
             self.stats_text.delete(1.0, tk.END)
             self.stats_text.insert(1.0, stats_text)
             
@@ -1449,33 +1534,33 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
                 elif 'received' in msg:
                     timestamp = msg['received']
                 else:
-                    self.log(f"Messaggio senza timestamp: {msg}", "debug")
+                    self.log(tr("logs.message_without_timestamp", message=msg), "debug")
                     continue
                 
                 sent_time = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S %d/%m")
                 
                 if msg.get('direction') == 'received':
-                    destinatario = f"Da: {msg['from']}"
-                    stato = "Ricevuto"
+                    destinatario = f"{tr('messages.from')}: {msg['from']}"
+                    stato = tr("messages.received")
                     tempo = "-"
                     tag = 'received'
                     tentativi = 0
                 else:
                     destinatario = msg.get('dest', 'Broadcast')
                     if msg['status'] == MessageState.DELIVERED:
-                        stato = "Consegnato"
+                        stato = tr("messages.delivered")
                         tempo = f"{msg.get('delivery_time', 0):.1f}"
                         tag = 'delivered'
                     elif msg['status'] == MessageState.PENDING:
-                        stato = "In attesa"
+                        stato = tr("messages.pending")
                         tempo = "-"
                         tag = 'pending'
                     elif msg['status'] == MessageState.TIMEOUT:
-                        stato = "Timeout"
+                        stato = tr("messages.timeout")
                         tempo = "-"
                         tag = 'timeout'
                     else:
-                        stato = "Inviato"
+                        stato = tr("messages.sent")
                         tempo = "-"
                         tag = 'sent'
                     tentativi = msg.get('retries', 0)
@@ -1499,31 +1584,31 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
                     self.messages_tree.delete(item)
                 
         except Exception as e:
-            self.log(f"Errore in refresh_message_stats: {e}", "error")
+            self.log(tr("logs.refresh_message_stats_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "debug")
 
     # Pulisce storico messaggi
     def clear_message_history(self):
         
-        if messagebox.askyesno("Conferma", "Cancellare tutto lo storico messaggi?"):
+        if messagebox.askyesno(tr("common.confirm"), tr("dialogs.clear_history_confirm")):
             self.device._message_history = []
             self.pending_messages.clear()
             self.refresh_message_stats()
             self.history_tree.delete(*self.history_tree.get_children())
-            self.log("Storico messaggi cancellato", "info")
+            self.log(tr("logs.history_cleared"), "info")
     
  
     def export_message_history(self):
         
         if not hasattr(self.device, '_message_history') or not self.device._message_history:
-            messagebox.showinfo("Info", "Nessun messaggio da esportare")
+            messagebox.showinfo(tr("common.info"), tr("dialogs.no_messages_export"))
             return
         
         path = filedialog.asksaveasfilename(
             defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("Tutti i file", "*.*")],
-            title="Esporta storico messaggi"
+            filetypes=[(tr("dialogs.csv_files"), "*.csv"), (tr("dialogs.all_files"), "*.*")],
+            title=tr("dialogs.export_history_title")
         )
         if not path:
             return
@@ -1531,7 +1616,7 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
         try:
             with open(path, 'w', encoding='utf-8') as f:
                 # Intestazione CSV
-                f.write("Data/Ora,Tipo,Destinazione/Mittente,Messaggio,Stato,Tempo (s),Tentativi,ID\n")
+                f.write(",".join([tr("csv.datetime"), tr("csv.type"), tr("csv.peer"), tr("csv.message"), tr("csv.status"), tr("csv.time_seconds"), tr("csv.attempts"), tr("csv.id")]) + "\n")
                 
                 for msg in self.device._message_history:
                     # Determina il timestamp
@@ -1542,31 +1627,31 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
                         timestamp = msg['received']
                         data_ora = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
                     else:
-                        data_ora = "N/A"
+                        data_ora = tr("common.not_available")
                     
                     # Determina il tipo e destinazione/mittente
                     if msg.get('direction') == 'received':
-                        tipo = "Ricevuto"
-                        destinazione = msg.get('from', 'Sconosciuto')
-                        stato = "Ricevuto"
+                        tipo = tr("messages.received")
+                        destinazione = msg.get('from', tr("common.unknown"))
+                        stato = tr("messages.received")
                         tempo = ""
                         tentativi = ""
                     else:
-                        tipo = "Inviato"
-                        destinazione = msg.get('dest', 'Broadcast')
+                        tipo = tr("messages.sent")
+                        destinazione = msg.get('dest', tr("common.broadcast"))
                         
                         # Stato del messaggio
                         if msg['status'] == MessageState.DELIVERED:
-                            stato = "Consegnato"
+                            stato = tr("messages.delivered")
                             tempo = f"{msg.get('delivery_time', 0):.1f}"
                         elif msg['status'] == MessageState.PENDING:
-                            stato = "In attesa"
+                            stato = tr("messages.pending")
                             tempo = ""
                         elif msg['status'] == MessageState.TIMEOUT:
-                            stato = "Timeout"
+                            stato = tr("messages.timeout")
                             tempo = ""
                         else:
-                            stato = "Inviato"
+                            stato = tr("messages.sent")
                             tempo = ""
                         
                         tentativi = msg.get('retries', 0)
@@ -1586,14 +1671,14 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
                     # Scrivi la riga CSV
                     f.write(','.join(f'"{c}"' for c in campi) + '\n')
                 
-            self.log(f"Storico esportato in {path}", "success")
-            messagebox.showinfo("Esportazione completata", f"Storico esportato in:\n{path}")
+            self.log(tr("logs.history_exported", path=path), "success")
+            messagebox.showinfo(tr("dialogs.export_done_title"), tr("dialogs.export_done_body", path=path))
             
         except Exception as e:
-            self.log(f"Errore esportazione: {e}", "error")
+            self.log(tr("logs.export_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "debug")
-            messagebox.showerror("Errore", f"Esportazione fallita:\n{str(e)}")
+            messagebox.showerror(tr("common.error"), tr("dialogs.export_failed_body", error=str(e)))
     
     def filter_messages(self):
         """Filtra messaggi per stato e testo"""
@@ -1606,18 +1691,18 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
             msg_text = values[2].lower()
             
             state_match = True
-            if filter_state != "Tutti":
-                if filter_state == "Consegnato":
-                    if not stato.startswith("Consegnato"):
+            if filter_state != tr("messages.all"):
+                if filter_state == tr("messages.delivered"):
+                    if not stato.startswith(tr("messages.delivered")):
                         state_match = False
-                elif filter_state == "In attesa":
-                    if stato != "In attesa":
+                elif filter_state == tr("messages.pending"):
+                    if stato != tr("messages.pending"):
                         state_match = False
-                elif filter_state == "Timeout":
-                    if stato != "Timeout":
+                elif filter_state == tr("messages.timeout"):
+                    if stato != tr("messages.timeout"):
                         state_match = False
-                elif filter_state == "Inviato":
-                    if stato != "Inviato":
+                elif filter_state == tr("messages.sent"):
+                    if stato != tr("messages.sent"):
                         state_match = False
             
             text_match = search_text in msg_text if search_text else True
@@ -1647,17 +1732,17 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
         
         data = nodes[node_id]
         user = data.get('user', {})
-        msg = f"ID: {node_id}\n"
-        msg += f"Name: {user.get('longName', 'N/A')}\n"
-        msg += f"Short: {user.get('shortName', 'N/A')}\n"
-        msg += f"HW: {user.get('hwModel', 'N/A')}\n"
-        msg += f"SNR: {data.get('snr', 'N/A')}\n"
-        msg += f"RSSI: {data.get('rssi', 'N/A')}\n"
-        msg += f"Battery: {data.get('deviceMetrics', {}).get('batteryLevel', 'N/A')}%\n"
-        msg += f"MQTT: {'Si' if data.get('viaMqtt') else 'No'}\n"
-        msg += f"Preferito: {'Si' if node_id in self.favorite_nodes else 'No'}"
+        msg = f"{tr('node_info.id')}: {node_id}\n"
+        msg += f"{tr('node_info.name')}: {user.get('longName', tr('common.not_available'))}\n"
+        msg += f"{tr('node_info.short')}: {user.get('shortName', tr('common.not_available'))}\n"
+        msg += f"{tr('node_info.hw')}: {user.get('hwModel', tr('common.not_available'))}\n"
+        msg += f"{tr('node_info.snr')}: {data.get('snr', tr('common.not_available'))}\n"
+        msg += f"{tr('node_info.rssi')}: {data.get('rssi', tr('common.not_available'))}\n"
+        msg += f"{tr('node_info.battery')}: {data.get('deviceMetrics', {}).get('batteryLevel', tr('common.not_available'))}%\n"
+        msg += f"{tr('node_info.mqtt')}: {tr('common.yes_short') if data.get('viaMqtt') else tr('common.no')}\n"
+        msg += f"{tr('node_info.favorite')}: {tr('common.yes_short') if node_id in self.favorite_nodes else tr('common.no')}"
         
-        messagebox.showinfo(f"Nodo {node_id}", msg)
+        messagebox.showinfo(tr("dialogs.node_info_title", node_id=node_id), msg)
     
     def show_node_menu(self, event):
         sel = self.nodes_tree.selection()
@@ -1670,30 +1755,30 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
         menu = tk.Menu(self.root, tearoff=0, bg=UI.PANEL, fg=UI.FG)
         
         if node_id in self.favorite_nodes:
-            menu.add_command(label="Rimuovi preferito", command=lambda: self.toggle_fav(node_id))
+            menu.add_command(label=tr("node_menu.remove_favorite"), command=lambda: self.toggle_fav(node_id))
         else:
-            menu.add_command(label="Aggiungi preferito", command=lambda: self.toggle_fav(node_id))
+            menu.add_command(label=tr("node_menu.add_favorite"), command=lambda: self.toggle_fav(node_id))
         
         menu.add_separator()
-        menu.add_command(label="Info", command=lambda: self.show_node_info(node_id))
-        menu.add_command(label="Messaggio", command=lambda: self.set_dest(node_id))
+        menu.add_command(label=tr("node_menu.info"), command=lambda: self.show_node_info(node_id))
+        menu.add_command(label=tr("node_menu.message"), command=lambda: self.set_dest(node_id))
         
         if is_mqtt:
             menu.add_separator()
-            menu.add_command(label="Elimina MQTT", command=lambda: self.delete_node(node_id),
+            menu.add_command(label=tr("node_menu.delete_mqtt"), command=lambda: self.delete_node(node_id),
                            foreground=UI.ERR)
         else:
-            menu.add_command(label="Elimina", command=lambda: self.delete_node(node_id))
+            menu.add_command(label=tr("node_menu.delete"), command=lambda: self.delete_node(node_id))
         
         menu.post(event.x_root, event.y_root)
     
     def toggle_fav(self, node_id):
         if node_id in self.favorite_nodes:
             self.favorite_nodes.remove(node_id)
-            self.log(f"Rimosso preferito: {node_id}", "info")
+            self.log(tr("logs.favorite_removed", node_id=node_id), "info")
         else:
             self.favorite_nodes.add(node_id)
-            self.log(f"Aggiunto preferito: {node_id}", "info")
+            self.log(tr("logs.favorite_added", node_id=node_id), "info")
         self.refresh_nodes()
     
     def set_dest(self, node_id):
@@ -1702,15 +1787,15 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
     
     def delete_node(self, node_id):
         if node_id == self.device.local_node_id:
-            messagebox.showwarning("Attenzione", "Non puoi eliminare il nodo locale")
+            messagebox.showwarning(tr("common.warning"), tr("dialogs.cannot_delete_local_node"))
             return
         
-        if messagebox.askyesno("Conferma", f"Eliminare nodo {node_id}?"):
+        if messagebox.askyesno(tr("common.confirm"), tr("dialogs.delete_node_confirm", node_id=node_id)):
             if self.device.remove_node(node_id):
-                self.log(f"Nodo {node_id} eliminato", "success")
+                self.log(tr("logs.node_deleted", node_id=node_id), "success")
                 self.refresh_nodes()
             else:
-                self.log(f"Errore eliminazione {node_id}", "error")
+                self.log(tr("logs.node_delete_error", node_id=node_id), "error")
     
     def filter_nodes(self):
         filt = self.vars['filter_text'].get().lower()
@@ -1724,11 +1809,11 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
     def show_node_list(self):
         nodes = self.device.get_nodes()
         if not nodes:
-            messagebox.showinfo("Info", "Nessun nodo disponibile")
+            messagebox.showinfo(tr("common.info"), tr("dialogs.no_nodes_available"))
             return
         
         dialog = tk.Toplevel(self.root)
-        dialog.title("Seleziona nodo")
+        dialog.title(tr("dialogs.select_node_title"))
         dialog.geometry("400x300")
         dialog.configure(bg=UI.BG)
         
@@ -1737,8 +1822,8 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
         
         node_map = {}
         for nid, data in nodes.items():
-            name = data.get('user', {}).get('longName', 'N/A')
-            tipo = "MQTT" if data.get('viaMqtt') else "Radio"
+            name = data.get('user', {}).get('longName', tr('common.not_available'))
+            tipo = "MQTT" if data.get('viaMqtt') else tr("common.radio")
             display = f"{nid} - {name} [{tipo}]"
             listbox.insert(tk.END, display)
             node_map[display] = nid
@@ -1750,28 +1835,25 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
                 self.vars['dest'].set(node_map[display])
                 dialog.destroy()
         
-        ttk.Button(dialog, text="Seleziona", command=select).pack(pady=5)
+        ttk.Button(dialog, text=tr("common.selected"), command=select).pack(pady=5)
     
     def manage_favorites(self):
-        messagebox.showinfo("Info", "Usa il menu contestuale per gestire i preferiti (Clic sul nodo e tasto destro)")
+        messagebox.showinfo(tr("common.info"), tr("dialogs.favorites_help"))
     
     def confirm_clean_nodes(self):
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso")
+            messagebox.showwarning(tr("common.warning"), tr("connection.not_connected"))
             return
         
         mqtt_count = sum(1 for d in self.device.get_nodes().values() if d.get('viaMqtt'))
-        msg = f"Eliminare tutti i nodi non preferiti?\n\n"
-        msg += f"MQTT: {mqtt_count} nodi\n"
-        msg += f"Radio: {len(self.device.get_nodes()) - mqtt_count - 1} nodi\n\n"
-        msg += f"Dopo la cancellazione, premi Reboot per rendere permanente."
+        msg = tr("dialogs.clean_nodes_confirm_body", mqtt_count=mqtt_count, radio_count=len(self.device.get_nodes()) - mqtt_count - 1)
         
-        if messagebox.askyesno("Conferma", msg, icon='warning'):
+        if messagebox.askyesno(tr("common.confirm"), msg, icon='warning'):
             self._clean_nodes()
     
     def _clean_nodes(self):
         if not self.device.connected:
-            self.log("Non connesso, impossibile pulire i nodi", "warn")
+            self.log(tr("logs.clean_nodes_not_connected"), "warn")
             return
 
         nodes = self.device.get_nodes()
@@ -1801,22 +1883,22 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
             try:
                 if self.device.remove_node(node_id):
                     removed += 1
-                    self.log(f"Nodo {node_id} eliminato", "info")
+                    self.log(tr("logs.node_deleted", node_id=node_id), "info")
                 else:
-                    self.log(f"Errore nell'eliminazione di {node_id}", "error")
+                    self.log(tr("logs.node_delete_error", node_id=node_id), "error")
             except Exception as e:
-                self.log(f"Eccezione durante eliminazione {node_id}: {e}", "error")
+                self.log(tr("logs.node_delete_exception", node_id=node_id, error=e), "error")
 
             self.root.update()
 
         self.root.config(cursor="")
-        self.log(f"Pulizia completata: {removed} nodi rimossi, {skipped} saltati", "success")
+        self.log(tr("logs.clean_completed", removed=removed, skipped=skipped), "success")
         self.refresh_nodes()
     
     def update_stats(self):
         if not self.device.connected:
             self.stats_display.delete(1.0, tk.END)
-            self.stats_display.insert(tk.END, "Non connesso")
+            self.stats_display.insert(tk.END, tr("connection.not_connected"))
             return
         
         nodes = self.device.get_nodes()
@@ -1824,27 +1906,28 @@ Tempo medio consegna: {stats['avg_delivery_time']:.2f}s
         
         msg_stats = self.device.get_message_stats() if hasattr(self.device, 'get_message_stats') else {}
         
-        stats = f"""STATISTICHE MESH
-{'='*40}
-
-NODI:
-Totale nodi: {len(nodes)}
-Radio: {len(nodes)-mqtt}
-MQTT: {mqtt}
-Preferiti: {len(self.favorite_nodes)}
-
-MESSAGGI:
-Totale: {msg_stats.get('total', 0)}
-Consegnati: {msg_stats.get('delivered', 0)}
-In attesa: {msg_stats.get('pending', 0)}
-Timeout: {msg_stats.get('timeout', 0)}
-Tasso successo: {msg_stats.get('success_rate', 0):.1f}%
-
-ERRORI:
-Errori parsing: {self.parse_errors}
-
-Nodo locale: {self.device.local_node_id}
-"""
+        stats = "\n".join([
+            tr("stats.mesh_title"),
+            "=" * 40,
+            "",
+            tr("stats.nodes"),
+            tr("stats.total_nodes", count=len(nodes)),
+            tr("stats.radio_nodes", count=len(nodes)-mqtt),
+            tr("stats.mqtt_nodes", count=mqtt),
+            tr("stats.favorites", count=len(self.favorite_nodes)),
+            "",
+            tr("stats.messages"),
+            tr("stats.total", count=msg_stats.get('total', 0)),
+            tr("stats.delivered", count=msg_stats.get('delivered', 0)),
+            tr("stats.pending", count=msg_stats.get('pending', 0)),
+            tr("stats.timeout", count=msg_stats.get('timeout', 0)),
+            tr("stats.success_rate", rate=msg_stats.get('success_rate', 0)),
+            "",
+            tr("stats.errors"),
+            tr("stats.parse_errors", count=self.parse_errors),
+            "",
+            tr("stats.local_node", node_id=self.device.local_node_id)
+        ])
         self.stats_display.delete(1.0, tk.END)
         self.stats_display.insert(tk.END, stats)
     
@@ -1855,7 +1938,7 @@ Nodo locale: {self.device.local_node_id}
     def apply_config(self):
         """Applica la configurazione al dispositivo (Update)"""
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso a nessun dispositivo")
+            messagebox.showwarning(tr("common.warning"), tr("dialogs.not_connected_body"))
             return
         
         advanced_changes = any([
@@ -1867,62 +1950,56 @@ Nodo locale: {self.device.local_node_id}
         
         if advanced_changes:
             proceed = messagebox.askyesno(
-                "Attenzione ! Conferma le modifiche radio",
-                "Stai per modificare parametri radio che potrebbero rendere\n"
-                "il dispositivo incompatibile con la rete attuale.\n\n"
-                "Vuoi continuare?",
+                tr("config.radio_confirm_title"),
+                tr("config.radio_confirm_body"),
                 icon='warning'
             )
             if not proceed:
-                self.log("Modifiche annullate", "info")
+                self.log(tr("config.changes_cancelled"), "info")
                 return
         
         try:
             self.root.config(cursor="watch")
             self.root.update()
             
-            self.log("Applicazione configurazione in corso...", "info")
+            self.log(tr("config.apply_running"), "info")
             
             if self.vars['channel_write_name'].get():
                 name = self.vars['channel_name'].get().strip()
                 if name and len(name.encode('utf-8')) > 11:
-                    messagebox.showerror("Errore", 
-                        "Il nome del canale è troppo lungo (max 11 byte)")
+                    messagebox.showerror(tr("common.error"), tr("channel.name_too_long_body"))
                     self.root.config(cursor="")
                     return
             
             changes = self.device.apply_all_config(self.vars, self._validate_channel_name)
             
             if changes:
-                self.log(f"Modifiche applicate: {len(changes)} parametri", "success")
+                self.log(tr("config.changes_applied", count=len(changes)), "success")
                 for change in changes[:10]:
                     self.log(f"  - {change}", "info")
                 
-                messagebox.showinfo("Successo", 
-                    f"Configurazione applicata!\n\n"
-                    f"{len(changes)} parametri modificati.\n\n"
-                    f"Rileggi la configurazione per verificare.")
+                messagebox.showinfo(tr("common.success"), tr("config.apply_success", count=len(changes)))
                 
                 self.root.after(2000, self.read_config)
             else:
-                self.log("Nessuna modifica rilevata", "info")
-                messagebox.showinfo("Info", "Nessuna modifica da applicare")
+                self.log(tr("config.no_changes"), "info")
+                messagebox.showinfo(tr("common.info"), tr("config.no_changes_body"))
         
         except Exception as e:
-            self.log(f"Errore applicazione: {e}", "error")
+            self.log(tr("config.apply_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "muted")
-            messagebox.showerror("Errore", str(e))
+            messagebox.showerror(tr("common.error"), str(e))
         
         finally:
             self.root.config(cursor="")
     
     def confirm_reboot(self):
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso")
+            messagebox.showwarning(tr("common.warning"), tr("connection.not_connected"))
             return
         
-        if messagebox.askyesno("Conferma", "Riavviare il dispositivo?\n\nLa connessione verrà persa per circa 10 secondi"):
+        if messagebox.askyesno(tr("common.confirm"), tr("dialogs.reboot_confirm_body")):
             self.device.reboot()
             self.disconnect()
             self._show_reboot_countdown()
@@ -1933,7 +2010,7 @@ Nodo locale: {self.device.local_node_id}
         dialog.geometry("300x150")
         dialog.configure(bg=UI.BG)
         
-        ttk.Label(dialog, text="Reboot in corso...", font=('',12,'bold')).pack(pady=20)
+        ttk.Label(dialog, text=tr("logs.reboot_running"), font=('',12,'bold')).pack(pady=20)
         
         count = tk.StringVar(value="30")
         ttk.Label(dialog, textvariable=count, font=('',24,'bold'), foreground=UI.WARN).pack()
@@ -1949,20 +2026,20 @@ Nodo locale: {self.device.local_node_id}
     
     def export_snapshot(self):
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso a nessun dispositivo")
+            messagebox.showwarning(tr("common.warning"), tr("dialogs.not_connected_body"))
             return
 
         try:
             self.root.config(cursor="watch")
             self.root.update()
 
-            self.log("Lettura configurazione completa per backup...", "info")
+            self.log(tr("logs.reading_backup_config"), "info")
             config = self.device.get_full_config()
 
             path = filedialog.asksaveasfilename(
                 defaultextension=".json",
-                filetypes=[("JSON files", "*.json"), ("Tutti i file", "*.*")],
-                title="Salva backup configurazione"
+                filetypes=[(tr("dialogs.json_files"), "*.json"), (tr("dialogs.all_files"), "*.*")],
+                title=tr("dialogs.backup_save_title")
             )
             if not path:
                 return
@@ -1970,35 +2047,32 @@ Nodo locale: {self.device.local_node_id}
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
 
-            self.log(f"Backup salvato in {path}", "success")
-            messagebox.showinfo("Backup completato", f"Configurazione salvata in:\n{path}")
+            self.log(tr("logs.backup_saved", path=path), "success")
+            messagebox.showinfo(tr("dialogs.backup_done_title"), tr("dialogs.backup_done_body", path=path))
 
         except Exception as e:
-            self.log(f"Errore durante il backup: {e}", "error")
+            self.log(tr("logs.backup_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "muted")
-            messagebox.showerror("Errore backup", str(e))
+            messagebox.showerror(tr("dialogs.backup_error_title"), str(e))
         finally:
             self.root.config(cursor="")
 
     def import_snapshot(self):
         if not self.device.connected:
-            messagebox.showwarning("Attenzione", "Non connesso a nessun dispositivo")
+            messagebox.showwarning(tr("common.warning"), tr("dialogs.not_connected_body"))
             return
 
         path = filedialog.askopenfilename(
-            filetypes=[("JSON files", "*.json"), ("Tutti i file", "*.*")],
-            title="Seleziona file di backup"
+            filetypes=[(tr("dialogs.json_files"), "*.json"), (tr("dialogs.all_files"), "*.*")],
+            title=tr("dialogs.restore_select_title")
         )
         if not path:
             return
 
         if not messagebox.askyesno(
-            "Conferma restore",
-            "Stai per sovrascrivere TUTTE le impostazioni del dispositivo con quelle del backup.\n\n"
-            "Il dispositivo potrebbe diventare incompatibile con la rete attuale.\n"
-            "Assicurati che il backup sia compatibile con il firmware corrente.\n\n"
-            "Continuare?",
+            tr("dialogs.restore_confirm_title"),
+            tr("dialogs.restore_confirm_body"),
             icon='warning'
         ):
             return
@@ -2010,24 +2084,25 @@ Nodo locale: {self.device.local_node_id}
             self.root.config(cursor="watch")
             self.root.update()
 
-            self.log("Ripristino configurazione in corso...", "info")
+            self.log(tr("logs.restore_running"), "info")
             self.device.set_full_config(config)
 
-            self.log("Configurazione ripristinata. Rilettura in corso...", "info")
+            self.log(tr("logs.restore_reread"), "info")
             self.root.after(2000, self.read_config)
-            messagebox.showinfo("Restore completato", "Configurazione ripristinata con successo.")
+            messagebox.showinfo(tr("dialogs.restore_done_title"), tr("dialogs.restore_done_body"))
 
         except Exception as e:
-            self.log(f"Errore durante il restore: {e}", "error")
+            self.log(tr("logs.restore_error", error=e), "error")
             import traceback
             self.log(traceback.format_exc(), "muted")
-            messagebox.showerror("Errore restore", str(e))
+            messagebox.showerror(tr("dialogs.restore_error_title"), str(e))
         finally:
             self.root.config(cursor="")
     
     def save_settings(self):
-        self.log("Impostazioni salvate", "info")
-        messagebox.showinfo("Info", "Impostazioni salvate (in memoria)")
+        save_language(self._language_code(self.vars["language"].get()))
+        self.log(tr("logs.settings_saved"), "info")
+        messagebox.showinfo(tr("dialogs.settings_saved_title"), tr("dialogs.settings_saved_body_memory"))
     
     def process_queue(self):
         try:
@@ -2069,7 +2144,7 @@ Nodo locale: {self.device.local_node_id}
             ts = float(value)
             abs_time = datetime.fromtimestamp(ts).strftime("%H:%M %d/%m")
             rel_time = utils.time_ago(ts)
-            return f"{abs_time} | {rel_time} fa" if rel_time else abs_time
+            return f"{abs_time} | {rel_time} {tr('time.ago')}" if rel_time else abs_time
         except:
             return ""
 
@@ -2082,21 +2157,21 @@ Nodo locale: {self.device.local_node_id}
             user = data.get('user', {})
             name = user.get('longName', '') or user.get('shortName', '') or '-'
             is_mqtt = data.get('viaMqtt', False)
-            tipo = "MQTT" if is_mqtt else "Radio"
+            tipo = "MQTT" if is_mqtt else tr("common.radio")
             fav = "*" if node_id in self.favorite_nodes else ""
             hops = data.get('hopsAway', '-')
             snr = data.get('snr', '-')
             rssi = data.get('rssi', '-')
             
-            qual = "Buono"
+            qual = tr("quality.good")
             try:
                 rssi_val = float(rssi) if rssi != '-' else -100
                 if rssi_val > self.vars['rssi_threshold'].get():
-                    qual = "Ottimo"
+                    qual = tr("quality.excellent")
                 elif rssi_val > self.vars['rssi_threshold'].get() - 20:
-                    qual = "Buono"
+                    qual = tr("quality.good")
                 else:
-                    qual = "Debole"
+                    qual = tr("quality.weak")
             except: pass
             
             last = self._format_last_contact(data.get('lastHeard'))
@@ -2116,8 +2191,8 @@ Nodo locale: {self.device.local_node_id}
             if self.vars['only_my_msgs'].get() and to_id != self.device.local_node_id:
                 return
             
-            msg_type = "Diretto" if to_id == self.device.local_node_id else "Canale"
-            self.log(f"{msg_type} da {from_id}: {text}\n", "info" if to_id == self.device.local_node_id else None)
+            msg_type = tr("message_types.direct") if to_id == self.device.local_node_id else tr("message_types.channel")
+            self.log(tr("logs.message_from", msg_type=msg_type, from_id=from_id, text=text), "info" if to_id == self.device.local_node_id else None)
             
         except Exception as e:
             self.parse_errors += 1
