@@ -52,7 +52,12 @@ Actual compatibility for some sections, however, depends on hardware and firmwar
 ├── core.py        # logica di connessione e gestione Meshtastic
 ├── utils.py       # funzioni helper
 ├── constants.py   # costanti UI e stati
-└── tabs.py        #  
+├── tabs.py
+├── i18n.py
+├── settings.json
+├── locales/                          # cartella dei linguaggi
+│   ├── it.json                       # lingua italiana
+│   └── en.json                       # lingua inglese
 ```
 
 
@@ -114,7 +119,8 @@ main.py creates the main Tkinter window and initializes the MeshtasticUltimateCe
 The node is connected via serial or TCP, configuration and channels are read, identity and role are checked, the required parameters are adjusted, and then a JSON backup is saved before applying more invasive changes. On the operational side, you can inspect the nodes seen by the device, use channel chat, send direct messages with ACK, and review delivery history.
 
 ## Project status
-
+
+
 
 
 ## Screenshot
