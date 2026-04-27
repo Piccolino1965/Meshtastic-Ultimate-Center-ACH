@@ -8,6 +8,7 @@ import math
 import time
 from datetime import datetime
 import json
+from i18n import tr
 
 def timestamp():
     return datetime.now().strftime("%H:%M:%S")
@@ -103,15 +104,17 @@ def format_delivery_time(seconds):
     return f"{seconds/60:.1f}m"
 
 def get_status_emoji(status):
-    # Restituisce una rappresentazione testuale dello stato del messaggio
+    # Restituisce una rappresentazione testuale localizzata dello stato del messaggio.
+    # I valori interni restano invariati: delivered, pending, timeout, sent, failed.
     status_map = {
-        'delivered': 'Consegnato',
-        'pending': 'In attesa',
-        'timeout': 'Timeout',
-        'sent': 'Inviato',
-        'failed': 'Fallito'
+        'delivered': tr('messages.delivered'),
+        'pending': tr('messages.pending'),
+        'timeout': tr('messages.timeout'),
+        'sent': tr('messages.sent'),
+        'failed': tr('messages.failed'),
+        'received': tr('messages.received')
     }
-    return status_map.get(status, 'Sconosciuto')
+    return status_map.get(status, tr('common.unknown'))
 
 def calculate_success_rate(history):
     # Calcola il tasso di successo dei messaggi
