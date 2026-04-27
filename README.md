@@ -49,12 +49,18 @@ La compatibilità effettiva di alcune sezioni dipende però da hardware e firmwa
 
 ```text
 .
-├── main.py        # entry point
-├── gui.py         # interfaccia principale Tkinter
-├── core.py        # logica di connessione e gestione Meshtastic
-├── utils.py       # funzioni helper
-├── constants.py   # costanti UI e stati
-└── tabs.py        #  
+├── main.py
+├── gui.py
+├── core.py
+├── utils.py
+├── constants.py
+├── tabs.py
+├── i18n.py
+├── settings.json
+├── locales/                          # cartella dei linguaggi
+│   ├── it.json                       # lingua italiana
+│   └── en.json                       # lingua inglese
+
 ```
 
 ## Requisiti
