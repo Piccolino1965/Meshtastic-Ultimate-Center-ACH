@@ -54,7 +54,13 @@ La compatibilità effettiva di alcune sezioni dipende però da hardware e firmwa
 ├── core.py        # logica di connessione e gestione Meshtastic
 ├── utils.py       # funzioni helper
 ├── constants.py   # costanti UI e stati
-└── tabs.py        #  
+├── i18n.py        # gestione multilingua tramite file JSON
+├── locales/
+│   ├── it.json    # testi interfaccia in italiano
+│   └── en.json    # testi interfaccia in inglese
+├── settings.json  # Set Lingua
+└── tabs.py        #
+
 ```
 
 ## Requisiti
