@@ -100,7 +100,8 @@
     "direct_messages": "Direct messages",
     "message_status": "Message status",
     "statistics": "Statistics",
-    "settings": "Settings"
+    "settings": "Settings",
+    "hops": "Hops"
   },
   "identity": {
     "long_name": "Long Name",
@@ -267,7 +268,11 @@
     "english": "English",
     "show_channel_debug": "Show channel debug",
     "persistence_note": "Persistence: 1. Clean nodes 2. Press Reboot",
-    "save_settings": "Save settings"
+    "save_settings": "Save settings",
+    "client_time_title": "Node time",
+    "client_time_current_pc": "PC time:",
+    "sync_time_from_client": "Sync time from PC",
+    "sync_time_note": "Sends the current computer time to the Meshtastic node. The PC must have the correct date, time, and timezone."
   },
   "statistics": {
     "title": "Statistics",
@@ -576,5 +581,15 @@
     "excellent": "Excellent",
     "good": "Good",
     "weak": "Weak"
+  },
+  "time_sync": {
+    "success_title": "Time synchronized",
+    "success_body": "Time sent to the node from the PC.\n\nLocal time: {local_time}\nTimestamp: {timestamp}",
+    "error_title": "Error",
+    "error_body": "Unable to synchronize the node time. Check that the device is connected and that your Meshtastic Python library supports setTime().",
+    "not_connected": "Node not connected.",
+    "api_missing": "setTime() is not available in the current Meshtastic Python library.",
+    "success": "Time synchronized from client: {local_time} ({timestamp})",
+    "error": "Time synchronization error: {error}"
   }
 }

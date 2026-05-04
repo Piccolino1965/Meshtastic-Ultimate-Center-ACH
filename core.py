@@ -46,6 +46,11 @@ class MeshtasticDevice:
         self._last_local_id = 0  # Contatore per ID locali
         self._message_callbacks = []  # Callback per notificare nuovi messaggi
 
+        # Timestamp rilevati dal client PC durante la sessione corrente.
+        # Sono più affidabili di lastHeard del NodeDB quando l'orario del nodo è appena stato sincronizzato
+        # o quando il NodeDB contiene valori vecchi salvati con un clock errato.
+        self._client_last_seen = {}
+
     # ==================== METODI DI CONNESSIONE ====================
 
     def connect_serial(self, port):
@@ -107,6 +112,7 @@ class MeshtasticDevice:
             self.connected = False
             self.state = ConnectionState.DISCONNECTED
             self._pending_acks.clear()
+            self._client_last_seen.clear()
             gc.collect()
             self.log(tr("core_logs.disconnect_done"), "info")
 
@@ -121,14 +127,141 @@ class MeshtasticDevice:
          
         self._message_callbacks.append(callback)
 
+
+    # ==================== SINCRONIZZAZIONE ORARIO ====================
+
+    def sync_time_from_client(self, timestamp=None):
+        """
+        Sincronizza l'orario del nodo usando l'orario del computer su cui gira il programma.
+        Usa l'API Meshtastic Node.setTime(timeSec), quando disponibile.
+        """
+        if not self.connected or not self.interface:
+            self.log(tr("time_sync.not_connected"), "warn")
+            return False
+
+        try:
+            time_sec = int(timestamp if timestamp is not None else time.time())
+        except Exception:
+            time_sec = int(time.time())
+
+        try:
+            target_node = self.local_node
+
+            # Fallback: alcune versioni della libreria espongono il nodo locale tramite getNode('^local').
+            if (not target_node or not hasattr(target_node, "setTime")) and hasattr(self.interface, "getNode"):
+                for node_ref in ("^local", self.local_node_id):
+                    if not node_ref:
+                        continue
+                    try:
+                        target_node = self.interface.getNode(node_ref)
+                        if target_node and hasattr(target_node, "setTime"):
+                            break
+                    except Exception:
+                        pass
+
+            if not target_node or not hasattr(target_node, "setTime"):
+                self.log(tr("time_sync.api_missing"), "warn")
+                return False
+
+            target_node.setTime(time_sec)
+            local_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time_sec))
+            self.log(tr("time_sync.success", timestamp=time_sec, local_time=local_time), "success")
+            return True
+
+        except Exception as e:
+            self.log(tr("time_sync.error", error=e), "error")
+            return False
+
     # ==================== METODI DI LETTURA ====================
 
+    def _node_id_from_data(self, key, data):
+        """Ricava un node_id stabile da chiave e contenuto del NodeDB."""
+        try:
+            if isinstance(data, dict):
+                user = data.get("user", {}) or {}
+                node_id = user.get("id") or data.get("id")
+                if node_id:
+                    return utils.normalize_id(node_id)
+
+                num = data.get("num") or data.get("nodeNum") or data.get("node_num")
+                if num is not None:
+                    return utils.normalize_id(num)
+
+            if isinstance(key, str) and key.startswith("!"):
+                return key.strip()
+
+            if key is not None:
+                return utils.normalize_id(key)
+        except Exception:
+            pass
+
+        return None
+
+    def _merge_node_data(self, old, new):
+        """Unisce due viste dello stesso nodo senza perdere campi già letti."""
+        if not isinstance(old, dict):
+            old = {}
+        if not isinstance(new, dict):
+            return dict(old)
+
+        merged = dict(old)
+        for key, value in new.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                nested = dict(merged[key])
+                for nested_key, nested_value in value.items():
+                    if nested_value is not None and nested_value != "":
+                        nested[nested_key] = nested_value
+                merged[key] = nested
+            elif value is not None and value != "":
+                merged[key] = value
+        return merged
+
     def get_nodes(self):
-        if not self.connected:
+        if not self.connected or not self.interface:
             return {}
-        nodes = getattr(self.interface, "nodes", {})
-        if isinstance(nodes, dict):
-            self._nodes_cache = nodes
+
+        merged_nodes = {}
+
+        # Prima vista: interface.nodes. È quella usata spesso dalle app e contiene nomi, posizione e metriche.
+        try:
+            nodes = getattr(self.interface, "nodes", {})
+            if isinstance(nodes, dict):
+                for key, data in nodes.items():
+                    if not isinstance(data, dict):
+                        continue
+                    node_id = self._node_id_from_data(key, data)
+                    if node_id:
+                        merged_nodes[node_id] = self._merge_node_data(merged_nodes.get(node_id), data)
+        except Exception:
+            pass
+
+        # Seconda vista: nodesByNum. La CLI Meshtastic la usa per showNodes e spesso qui compaiono
+        # meglio lastHeard e hopsAway. La fondiamo con interface.nodes.
+        try:
+            nodes_by_num = getattr(self.interface, "nodesByNum", {})
+            if isinstance(nodes_by_num, dict):
+                for key, data in nodes_by_num.items():
+                    if not isinstance(data, dict):
+                        continue
+                    node_id = self._node_id_from_data(key, data)
+                    if node_id:
+                        merged_nodes[node_id] = self._merge_node_data(merged_nodes.get(node_id), data)
+        except Exception:
+            pass
+
+        # Applica il last-seen rilevato dal client PC durante questa sessione.
+        # Non sostituisce lastHeard originale del NodeDB: aggiunge un campo separato.
+        try:
+            for node_id, seen_ts in self._client_last_seen.items():
+                if node_id not in merged_nodes:
+                    merged_nodes[node_id] = {}
+                merged_nodes[node_id]['clientLastSeen'] = seen_ts
+        except Exception:
+            pass
+
+        if merged_nodes:
+            self._nodes_cache = merged_nodes
+
         return self._nodes_cache
 
     def wait_for_config(self, timeout=3.0):
@@ -476,6 +609,7 @@ class MeshtasticDevice:
     def on_packet_received(self, packet, interface):
         
         try:
+            self._record_client_last_seen(packet)
             decoded = packet.get('decoded', {})
             # Se c'è requestId, è un ACK
             if decoded.get('requestId'):
@@ -485,6 +619,33 @@ class MeshtasticDevice:
                 self._handle_text_packet(packet)
         except Exception as e:
             self.log(tr("core_logs.packet_receive_error", error=e), "error")
+
+    def _record_client_last_seen(self, packet):
+        """Registra quando il PC ha visto traffico proveniente da un nodo."""
+        try:
+            from_id = utils.normalize_id(self._packet_value(packet, 'fromId', 'from_id', 'from'))
+            if not from_id:
+                return
+
+            # Evita di contaminare la tabella con eventi generati dal nodo locale.
+            if self.local_node_id and from_id == self.local_node_id:
+                return
+
+            self._client_last_seen[from_id] = time.time()
+        except Exception:
+            pass
+
+    def _packet_value(self, packet, *names, default=None):
+        """Legge un campo da un pacchetto gestendo sia dict sia oggetti protobuf-like."""
+        for name in names:
+            try:
+                if isinstance(packet, dict) and name in packet:
+                    return packet.get(name)
+                if hasattr(packet, name):
+                    return getattr(packet, name)
+            except Exception:
+                pass
+        return default
 
     def _handle_ack_packet(self, packet):
         

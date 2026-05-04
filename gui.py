@@ -102,14 +102,19 @@ class MeshtasticUltimateCenter:
         La UI viene aggiornata al prossimo avvio per evitare effetti collaterali sui widget Tkinter.
         """
         lang_code = self._language_code(self.vars["language"].get())
-        save_language(lang_code)
-        self.vars["language"].set(self._language_label(lang_code))
 
-        self.log(tr("logs.language_saved", language=self.vars["language"].get()), "info")
-        messagebox.showinfo(
-            tr("dialogs.settings_saved_title"),
-            tr("settings.language_restart_note")
-        )
+        if save_language(lang_code):
+            self.vars["language"].set(self._language_label(lang_code))
+            self.log(tr("logs.settings_saved"), "info")
+            messagebox.showinfo(
+                tr("dialogs.settings_saved_title"),
+                tr("settings.language_restart_note")
+            )
+        else:
+            messagebox.showerror(
+                tr("common.error"),
+                "Impossibile salvare settings.json nella cartella dell'applicazione."
+            )
 
     # delineo tutte le variabili Tkinter
     def _create_variables(self):
@@ -390,6 +395,7 @@ class MeshtasticUltimateCenter:
         self.tab_messages = ttk.Frame(self.notebook)
         self._build_messages_tab()
         self.notebook.add(self.tab_messages, text=tr("tabs.message_status"))
+
         
         # Stats tab
         self.tab_stats = ttk.Frame(self.notebook)
@@ -884,6 +890,29 @@ class MeshtasticUltimateCenter:
             justify=tk.LEFT
         ).pack(anchor="w", padx=10, pady=(0, 8))
 
+        # Sincronizzazione orario dal client
+        time_frame = ttk.LabelFrame(frame, text=tr("settings.client_time_title"))
+        time_frame.pack(fill=tk.X, pady=10)
+
+        time_row = ttk.Frame(time_frame)
+        time_row.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(time_row, text=tr("settings.client_time_current_pc")).pack(side=tk.LEFT)
+        self.client_time_value = ttk.Label(time_row, text=datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        self.client_time_value.pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(
+            time_frame,
+            text=tr("settings.sync_time_from_client"),
+            command=self.sync_node_time_from_client
+        ).pack(anchor="w", padx=10, pady=(5, 2))
+
+        ttk.Label(
+            time_frame,
+            text=tr("settings.sync_time_note"),
+            justify=tk.LEFT
+        ).pack(anchor="w", padx=10, pady=(0, 8))
+
         # Impostazioni ACK
         ack_settings = ttk.LabelFrame(frame, text=tr("settings.ack_settings"))
         ack_settings.pack(fill=tk.X, pady=10)
@@ -965,7 +994,13 @@ class MeshtasticUltimateCenter:
                 self.host_entry.pack(side=tk.LEFT, padx=5)
     
     def _update_clock(self):
-        self.clock_label.config(text=datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        now_text = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.clock_label.config(text=now_text)
+        if hasattr(self, "client_time_value"):
+            try:
+                self.client_time_value.config(text=now_text)
+            except Exception:
+                pass
         self.root.after(1000, self._update_clock)
     
     def _validate_channel_name(self, event=None):
@@ -975,6 +1010,22 @@ class MeshtasticUltimateCenter:
             return False
         return True
     
+    def sync_node_time_from_client(self):
+        """Invia al nodo l'orario corrente del computer collegato."""
+        timestamp = int(time.time())
+        local_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+        if self.device.sync_time_from_client(timestamp):
+            messagebox.showinfo(
+                tr("time_sync.success_title"),
+                tr("time_sync.success_body", timestamp=timestamp, local_time=local_time)
+            )
+        else:
+            messagebox.showerror(
+                tr("time_sync.error_title"),
+                tr("time_sync.error_body")
+            )
+
     # ==================== METODI PRINCIPALI ====================
     #------------------------------------------------------------
 
@@ -1200,17 +1251,22 @@ class MeshtasticUltimateCenter:
                 if not include_self and node_id == self.device.local_node_id:
                     continue
                 
-                if only_recent and data.get('lastHeard'):
+                last_ts = self._last_contact_sort_ts(data)
+
+                if only_recent and last_ts:
                     try:
-                        if now_ts - float(data['lastHeard']) > recent_limit:
+                        if now_ts - last_ts > recent_limit:
                             continue
-                    except: pass
+                    except Exception:
+                        pass
                 
                 user = data.get('user', {})
                 lat, lon, _ = utils.extract_position(data)
                 dist = utils.haversine_meters(local_lat, local_lon, lat, lon)
                 
-                last_str = self._format_last_contact(data.get('lastHeard'))
+                last_str = self._format_mesh_last_contact(data)
+                hops_str = self._format_mesh_hops(data)
+                snr_str = self._format_signal_value(self._first_present(data, ('snr', 'rxSnr', 'rx_snr'), ''))
                 
                 rows.append({
                     'id': node_id,
@@ -1218,12 +1274,15 @@ class MeshtasticUltimateCenter:
                     'long': user.get('longName', ''),
                     'hw': user.get('hwModel', ''),
                     'role': user.get('role', ''),
-                    'hops': data.get('hopsAway', ''),
-                    'snr': data.get('snr', ''),
+                    'hops': hops_str,
+                    'snr': snr_str,
                     'dist': utils.format_distance(dist),
                     'last': last_str,
+                    'last_ts': last_ts or 0,
                 })
             
+            rows.sort(key=lambda r: r.get('last_ts', 0), reverse=True)
+
             self.mesh_tree.delete(*self.mesh_tree.get_children())
             for r in rows:
                 self.mesh_tree.insert('', tk.END, values=(
@@ -1251,7 +1310,14 @@ class MeshtasticUltimateCenter:
         if vals:
             self.mesh_detail.delete(1.0, tk.END)
             self.mesh_detail.insert(tk.END, tr("mesh.detail_title", node_id=vals[0]) + "\n")
-            self.mesh_detail.insert(tk.END, f"Short: {vals[1]}\nLong: {vals[2]}\nHW: {vals[3]}\nRole: {vals[4]}")
+            self.mesh_detail.insert(tk.END, f"Short: {vals[1]}\n")
+            self.mesh_detail.insert(tk.END, f"Long: {vals[2]}\n")
+            self.mesh_detail.insert(tk.END, f"HW: {vals[3]}\n")
+            self.mesh_detail.insert(tk.END, f"Role: {vals[4]}\n")
+            self.mesh_detail.insert(tk.END, f"Hops: {vals[5]}\n")
+            self.mesh_detail.insert(tk.END, f"SNR: {vals[6]}\n")
+            self.mesh_detail.insert(tk.END, f"Distance: {vals[7]}\n")
+            self.mesh_detail.insert(tk.END, f"Last Heard: {vals[8]}")
     
     def send_chat(self):
         msg = self.chat_text.get(1.0, tk.END).strip()
@@ -2100,9 +2166,17 @@ class MeshtasticUltimateCenter:
             self.root.config(cursor="")
     
     def save_settings(self):
-        save_language(self._language_code(self.vars["language"].get()))
-        self.log(tr("logs.settings_saved"), "info")
-        messagebox.showinfo(tr("dialogs.settings_saved_title"), tr("dialogs.settings_saved_body_memory"))
+        lang_code = self._language_code(self.vars["language"].get())
+
+        if save_language(lang_code):
+            self.vars["language"].set(self._language_label(lang_code))
+            self.log(tr("logs.settings_saved"), "info")
+            messagebox.showinfo(tr("dialogs.settings_saved_title"), tr("dialogs.settings_saved_body_memory"))
+        else:
+            messagebox.showerror(
+                tr("common.error"),
+                "Impossibile salvare settings.json nella cartella dell'applicazione."
+            )
     
     def process_queue(self):
         try:
@@ -2137,16 +2211,187 @@ class MeshtasticUltimateCenter:
         
         self.root.after(100, self.process_queue)
     
-    def _format_last_contact(self, value):
-        if not value:
-            return ""
+    def _first_present(self, data, keys, default=None):
+        """Restituisce il primo campo realmente presente, preservando anche il valore 0."""
+        if not isinstance(data, dict):
+            return default
+
+        for key in keys:
+            try:
+                if "." in key:
+                    value = utils.get_nested(data, key, None)
+                else:
+                    value = data.get(key, None)
+
+                if value is not None and value != "":
+                    return value
+            except Exception:
+                pass
+
+        return default
+
+    def _normalize_timestamp(self, value):
+        """Normalizza timestamp Meshtastic in secondi Unix."""
+        if value is None or value == "":
+            return None
+
         try:
+            if isinstance(value, dict):
+                value = value.get("seconds") or value.get("sec") or value.get("timestamp")
+
+            if isinstance(value, str):
+                value = value.strip()
+                if not value:
+                    return None
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    pass
+
             ts = float(value)
+
+            # Alcune sorgenti possono fornire millisecondi o nanosecondi invece dei secondi.
+            if ts > 100000000000000:
+                ts = ts / 1000000000
+            elif ts > 100000000000:
+                ts = ts / 1000
+
+            if ts <= 0:
+                return None
+
+            return ts
+        except Exception:
+            return None
+
+    def _extract_client_last_seen(self, data):
+        return self._first_present(data, (
+            'clientLastSeen',
+            'client_last_seen',
+            'pcLastSeen',
+            'pc_last_seen',
+            'liveLastSeen',
+            'live_last_seen',
+        ), None)
+
+    def _extract_last_heard(self, data):
+        # Valore proveniente dal NodeDB Meshtastic. Può essere vecchio o basato su un clock del nodo
+        # non ancora sincronizzato, quindi nella Mesh tab non lo usiamo più per calcolare l'eta relativa.
+        return self._first_present(data, (
+            'lastHeard',
+            'last_heard',
+            'lastheard',
+            'lastSeen',
+            'last_seen',
+            'seenAt',
+            'seen_at',
+        ), None)
+
+    def _extract_since_seconds(self, data):
+        value = self._first_present(data, (
+            'since',
+            'secondsSinceLastHeard',
+            'seconds_since_last_heard',
+            'age',
+            'ageSeconds',
+            'age_seconds',
+        ), None)
+
+        if value in (None, ""):
+            return None
+
+        try:
+            return max(0, float(value))
+        except Exception:
+            return None
+
+    def _format_last_contact(self, value, relative=True, prefix=""):
+        ts = self._normalize_timestamp(value)
+        if not ts:
+            return "-"
+
+        try:
             abs_time = datetime.fromtimestamp(ts).strftime("%H:%M %d/%m")
+            if not relative:
+                return f"{prefix}{abs_time}" if prefix else abs_time
+
             rel_time = utils.time_ago(ts)
-            return f"{abs_time} | {rel_time} {tr('time.ago')}" if rel_time else abs_time
-        except:
-            return ""
+            shown = f"{abs_time} | {rel_time} {tr('time.ago')}" if rel_time else abs_time
+            return f"{shown} {prefix}" if prefix else shown
+        except Exception:
+            return "-"
+
+    def _format_mesh_last_contact(self, data):
+        # Priorità 1: quando il PC ha visto davvero traffico da quel nodo durante questa sessione.
+        # Questo valore non dipende dall'orologio della Heltec e resta coerente dopo il set time.
+        client_ts = self._normalize_timestamp(self._extract_client_last_seen(data))
+        if client_ts:
+            return self._format_last_contact(client_ts, relative=True, prefix="(client)")
+
+        # Priorità 2: se la libreria fornisce un'età relativa già pronta, ricaviamo un timestamp lato PC.
+        since_seconds = self._extract_since_seconds(data)
+        if since_seconds is not None:
+            return self._format_last_contact(time.time() - since_seconds, relative=True, prefix="(client)")
+
+        # Priorità 3: NodeDB. Lo mostriamo solo come valore assoluto, senza "x ore fa", perché può
+        # essere stato scritto quando il nodo aveva l'orologio sbagliato.
+        node_ts = self._normalize_timestamp(self._extract_last_heard(data))
+        if node_ts:
+            return self._format_last_contact(node_ts, relative=False, prefix="NodeDB " )
+
+        return "-"
+
+    def _last_contact_sort_ts(self, data):
+        client_ts = self._normalize_timestamp(self._extract_client_last_seen(data))
+        if client_ts:
+            return client_ts
+
+        since_seconds = self._extract_since_seconds(data)
+        if since_seconds is not None:
+            return time.time() - since_seconds
+
+        return self._normalize_timestamp(self._extract_last_heard(data)) or 0
+
+    def _format_mesh_hops(self, data):
+        value = self._first_present(data, (
+            'hopsAway',
+            'hops_away',
+            'hops',
+            'numHops',
+            'num_hops',
+            'hopCount',
+            'hop_count',
+        ), None)
+
+        if value is None:
+            hop_start = self._first_present(data, ('hopStart', 'hop_start'), None)
+            hop_limit = self._first_present(data, ('hopLimit', 'hop_limit'), None)
+            try:
+                if hop_start is not None and hop_limit is not None:
+                    value = max(0, int(hop_start) - int(hop_limit))
+            except Exception:
+                value = None
+
+        if value is None or value == "":
+            return "-"
+
+        try:
+            numeric = float(value)
+            if numeric.is_integer():
+                return str(int(numeric))
+            return str(numeric)
+        except Exception:
+            return str(value)
+
+    def _format_signal_value(self, value):
+        if value is None or value == "":
+            return "-"
+        try:
+            numeric = float(value)
+            if numeric.is_integer():
+                return str(int(numeric))
+            return f"{numeric:.1f}"
+        except Exception:
+            return str(value)
 
     def _populate_nodes(self, nodes):
         self.nodes_tree.delete(*self.nodes_tree.get_children())
@@ -2159,9 +2404,9 @@ class MeshtasticUltimateCenter:
             is_mqtt = data.get('viaMqtt', False)
             tipo = "MQTT" if is_mqtt else tr("common.radio")
             fav = "*" if node_id in self.favorite_nodes else ""
-            hops = data.get('hopsAway', '-')
-            snr = data.get('snr', '-')
-            rssi = data.get('rssi', '-')
+            hops = self._format_mesh_hops(data)
+            snr = self._format_signal_value(self._first_present(data, ('snr', 'rxSnr', 'rx_snr'), '-'))
+            rssi = self._format_signal_value(self._first_present(data, ('rssi', 'rxRssi', 'rx_rssi'), '-'))
             
             qual = tr("quality.good")
             try:
@@ -2174,7 +2419,7 @@ class MeshtasticUltimateCenter:
                     qual = tr("quality.weak")
             except: pass
             
-            last = self._format_last_contact(data.get('lastHeard'))
+            last = self._format_mesh_last_contact(data)
             
             self.nodes_tree.insert('', tk.END, values=(
                 node_id, name, tipo, fav, hops, snr, rssi, qual, last

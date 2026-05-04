@@ -100,7 +100,8 @@
     "direct_messages": "Messaggi diretti",
     "message_status": "Stato Messaggi",
     "statistics": "Statistiche",
-    "settings": "Impostazioni"
+    "settings": "Impostazioni",
+    "hops": "hop"
   },
   "identity": {
     "long_name": "Long Name",
@@ -267,7 +268,11 @@
     "english": "English",
     "show_channel_debug": "Mostra debug canali",
     "persistence_note": "Persistenza: 1. Cancella nodi 2. Premi Reboot",
-    "save_settings": "Salva impostazioni"
+    "save_settings": "Salva impostazioni",
+    "client_time_title": "Orario del nodo",
+    "client_time_current_pc": "Ora PC:",
+    "sync_time_from_client": "Sincronizza ora dal PC",
+    "sync_time_note": "Invia al nodo Meshtastic l'orario corrente del computer collegato. Il PC deve avere data, ora e fuso orario corretti."
   },
   "statistics": {
     "title": "Statistiche",
@@ -576,5 +581,15 @@
     "excellent": "Ottimo",
     "good": "Buono",
     "weak": "Debole"
+  },
+  "time_sync": {
+    "success_title": "Ora sincronizzata",
+    "success_body": "Orario inviato al nodo dal PC.\n\nOra locale: {local_time}\nTimestamp: {timestamp}",
+    "error_title": "Errore",
+    "error_body": "Impossibile sincronizzare l'orario del nodo. Controlla che il dispositivo sia connesso e che la versione della libreria Meshtastic supporti setTime().",
+    "not_connected": "Nodo non connesso.",
+    "api_missing": "Funzione setTime() non disponibile nella libreria Meshtastic in uso.",
+    "success": "Orario sincronizzato dal client: {local_time} ({timestamp})",
+    "error": "Errore sincronizzazione orario: {error}"
   }
 }
