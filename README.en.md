@@ -3,6 +3,7 @@
 IPython desktop interface built with Tkinter to read, configure, and manage a Meshtastic node from a single window.
 
 The project was designed with a practical approach: connect the device via serial or TCP, read the node's actual configuration, adjust the most useful parameters, and also have an operational area dedicated to nodes, chat, direct messages, history, and delivery confirmations.
+Select the language, exit the application, and relaunch it. Alternatively, edit settings.json
 
 ## What it does
 
