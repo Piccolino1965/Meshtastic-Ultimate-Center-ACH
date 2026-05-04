@@ -102,14 +102,19 @@ class MeshtasticUltimateCenter:
         La UI viene aggiornata al prossimo avvio per evitare effetti collaterali sui widget Tkinter.
         """
         lang_code = self._language_code(self.vars["language"].get())
-        save_language(lang_code)
-        self.vars["language"].set(self._language_label(lang_code))
 
-        self.log(tr("logs.language_saved", language=self.vars["language"].get()), "info")
-        messagebox.showinfo(
-            tr("dialogs.settings_saved_title"),
-            tr("settings.language_restart_note")
-        )
+        if save_language(lang_code):
+            self.vars["language"].set(self._language_label(lang_code))
+            self.log(tr("logs.settings_saved"), "info")
+            messagebox.showinfo(
+                tr("dialogs.settings_saved_title"),
+                tr("settings.language_restart_note")
+            )
+        else:
+            messagebox.showerror(
+                tr("common.error"),
+                "Impossibile salvare settings.json nella cartella dell'applicazione."
+            )
 
     # delineo tutte le variabili Tkinter
     def _create_variables(self):
@@ -2100,9 +2105,17 @@ class MeshtasticUltimateCenter:
             self.root.config(cursor="")
     
     def save_settings(self):
-        save_language(self._language_code(self.vars["language"].get()))
-        self.log(tr("logs.settings_saved"), "info")
-        messagebox.showinfo(tr("dialogs.settings_saved_title"), tr("dialogs.settings_saved_body_memory"))
+        lang_code = self._language_code(self.vars["language"].get())
+
+        if save_language(lang_code):
+            self.vars["language"].set(self._language_label(lang_code))
+            self.log(tr("logs.settings_saved"), "info")
+            messagebox.showinfo(tr("dialogs.settings_saved_title"), tr("dialogs.settings_saved_body_memory"))
+        else:
+            messagebox.showerror(
+                tr("common.error"),
+                "Impossibile salvare settings.json nella cartella dell'applicazione."
+            )
     
     def process_queue(self):
         try:
