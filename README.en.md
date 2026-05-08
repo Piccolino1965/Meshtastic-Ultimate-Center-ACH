@@ -53,13 +53,12 @@ Actual compatibility for some sections, however, depends on hardware and firmwar
 ├── core.py        # logica di connessione e gestione Meshtastic
 ├── utils.py       # funzioni helper
 ├── constants.py   # costanti UI e stati
-├── i18n.py        # gestione multilingua tramite file JSON
-├── locales/
-│   ├── it.json    # testi interfaccia in italiano
-│   └── en.json    # testi interfaccia in inglese
-├── settings.json  # Set Lingua
-└── tabs.py        #
-
+├── tabs.py
+├── i18n.py
+├── settings.json
+├── locales/                          # cartella dei linguaggi
+│   ├── it.json                       # lingua italiana
+│   └── en.json                       # lingua inglese
 ```
 
 
